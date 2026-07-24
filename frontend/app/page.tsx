@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { jobStore } from '@/lib/jobStore'
+import { dashboardWorkspaceHref } from '@/lib/dashboardNavigation'
 
 const SUGGESTIONS = [
   'Build a SaaS authentication system with JWT and OAuth',
@@ -36,9 +37,16 @@ export default function HomePage() {
     }
   }
 
+  function handleOpenWorkspaces() {
+    const search = new URLSearchParams(window.location.search)
+    router.push(
+      dashboardWorkspaceHref('new', search.get('key'))
+    )
+  }
+
   return (
     <div className="flex h-screen bg-black text-white overflow-hidden">
-      {/* Left rail — minimal icon sidebar */}
+      {/* Minimal icon rail */}
       <div className="w-14 flex flex-col items-center py-4 gap-6 border-r border-white/5 flex-shrink-0">
         {/* Logo */}
         <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-xs font-bold">
@@ -124,6 +132,23 @@ export default function HomePage() {
                 {s}
               </button>
             ))}
+          </div>
+
+          <div className="mt-8 border-t border-white/10 pt-5">
+            <button
+              onClick={handleOpenWorkspaces}
+              className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-left transition-colors hover:border-indigo-500/50 hover:bg-indigo-500/10 active:scale-[0.99]"
+            >
+              <span>
+                <span className="block text-sm font-semibold text-white">
+                  Research workspaces
+                </span>
+                <span className="mt-0.5 block text-xs text-white/40">
+                  Plan recruitment, monitor experts, and synthesize findings.
+                </span>
+              </span>
+              <span className="text-sm text-indigo-300">Open</span>
+            </button>
           </div>
         </div>
       </div>

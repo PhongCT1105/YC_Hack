@@ -61,9 +61,11 @@ async function sendLinqMessage(phone: string, content: string, chatId?: string) 
 export function WorkerPanel({
   worker,
   onClose,
+  adminKey,
 }: {
   worker: Worker | null
   onClose: () => void
+  adminKey?: string
 }) {
   const { mode } = useMode()
   const isLive = mode === 'live'
@@ -71,6 +73,8 @@ export function WorkerPanel({
   const [input, setInput] = useState('')
   const [localMessages, setLocalMessages] = useState(worker?.messages ?? [])
   const [chatId, setChatId] = useState<string | null>(worker?.linqConversationId ?? null)
+  const [sendError, setSendError] = useState<string | null>(null)
+  const [sending, setSending] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -97,6 +101,11 @@ export function WorkerPanel({
     return () => clearInterval(interval)
   }, [isLive, chatId])
 
+  // Re-sync thread when fresh messages arrive for the same worker via polling
+  useEffect(() => {
+    if (worker) setLocalMessages(worker.messages)
+  }, [worker?.messages.length])
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [localMessages])
@@ -107,7 +116,9 @@ export function WorkerPanel({
     const timestamp = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`
     const content = input.trim()
     setInput('')
+    setSendError(null)
 
+    // Linq path: live mode + worker has a phone
     if (isLive && worker.linqPhone) {
       try {
         const result = await sendLinqMessage(worker.linqPhone, content, chatId ?? undefined)
@@ -122,11 +133,34 @@ export function WorkerPanel({
           { id: `pm-${Date.now()}`, sender: 'agent', content, timestamp },
         ])
       }
-    } else {
+      return
+    }
+
+    // Sprint path: persist through the coordinator so the worker sees it
+    if (!adminKey) {
+      setSendError('Read-only. Append ?key=ADMIN_KEY to the dashboard URL to message workers.')
+      return
+    }
+    setSending(true)
+    try {
+      const res = await fetch('/api/sprint/message', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-admin-key': adminKey },
+        body: JSON.stringify({ submissionId: worker.id, content: `[PM] ${content}` }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setSendError(data.error ?? `send failed (${res.status})`)
+        return
+      }
       setLocalMessages((prev) => [
         ...prev,
         { id: `pm-${Date.now()}`, sender: 'agent', content, timestamp },
       ])
+    } catch (e) {
+      setSendError(e instanceof Error ? e.message : 'send failed')
+    } finally {
+      setSending(false)
     }
   }
 
@@ -226,13 +260,14 @@ export function WorkerPanel({
           <div className="px-3 pb-3 pt-2 border-t border-white/5 flex-shrink-0">
             <div className="flex items-center gap-2">
               <input
-                className="flex-1 rounded-full px-4 py-2 text-sm text-white focus:outline-none transition-all"
+                className="flex-1 rounded-full px-4 py-2 text-sm text-white focus:outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{
                   background: 'rgba(255,255,255,0.07)',
                   border: '1px solid rgba(255,255,255,0.1)',
                 }}
-                placeholder="Message"
+                placeholder={adminKey ? 'Message' : 'read-only (no admin key)'}
                 value={input}
+                disabled={!adminKey && !worker.linqPhone}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
@@ -243,16 +278,24 @@ export function WorkerPanel({
               />
               <button
                 onClick={() => void handleSend()}
-                disabled={!input.trim()}
+                disabled={!input.trim() || sending}
                 className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-all disabled:opacity-25"
-                style={{ background: input.trim() ? '#0A84FF' : 'rgba(255,255,255,0.1)' }}
+                style={{ background: input.trim() && !sending ? '#0A84FF' : 'rgba(255,255,255,0.1)' }}
                 aria-label="Send"
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 19V5M5 12l7-7 7 7"/>
-                </svg>
+                {sending
+                  ? <span className="text-white text-xs">…</span>
+                  : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 19V5M5 12l7-7 7 7"/>
+                    </svg>
+                }
               </button>
             </div>
+            {sendError && (
+              <p className="text-[10px] text-red-400 mt-1.5 text-center truncate" title={sendError}>
+                ⚠ {sendError}
+              </p>
+            )}
           </div>
         </>
       )}

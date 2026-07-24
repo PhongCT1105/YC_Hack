@@ -1,12 +1,16 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useMode } from '@/lib/modeContext'
+import { shouldShowModeToggle } from '@/lib/modeTogglePolicy'
 
 export function ModeToggle() {
   const { mode, setMode } = useMode()
   const router = useRouter()
+  const pathname = usePathname()
   const isLive = mode === 'live'
+
+  if (!shouldShowModeToggle(pathname)) return null
 
   function handleToggle() {
     setMode(isLive ? 'mock' : 'live')

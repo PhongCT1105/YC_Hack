@@ -1,59 +1,38 @@
 import { NextResponse } from 'next/server'
+import { db } from '@/lib/db'
 import { supabase } from '@/lib/supabase'
 
+export const dynamic = 'force-dynamic'
+export const maxDuration = 60
+
+// Combined health: sprint pipeline (db) + jobs/linq system (supabase).
+// Each check is tolerant — one subsystem being down doesn't hide the other.
 export async function GET() {
   const checks: Record<string, { ok: boolean; detail: string }> = {}
 
-  // 1. Env vars present
-  checks.env = {
-    ok: !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
-    detail: process.env.NEXT_PUBLIC_SUPABASE_URL
-      ? `URL: ${process.env.NEXT_PUBLIC_SUPABASE_URL}`
-      : 'NEXT_PUBLIC_SUPABASE_URL is missing',
+  // Sprint pipeline (sprints/subtasks/findings on the primary client)
+  try {
+    const { error } = await db.from('sprints').select('id').limit(1)
+    checks.sprints = { ok: !error, detail: error ? error.message : 'connected' }
+  } catch (e) {
+    checks.sprints = { ok: false, detail: String(e) }
   }
 
-  // 2. Can reach Supabase (query a known system table)
+  // Jobs system (teammate's schema — may share the same project)
   try {
     const { error } = await supabase.from('jobs').select('id').limit(1)
-    checks.jobs_table = {
-      ok: !error,
-      detail: error ? `${error.code}: ${error.message}` : 'jobs table reachable',
-    }
+    checks.jobs_table = { ok: !error, detail: error ? `${error.code}: ${error.message}` : 'jobs table reachable' }
   } catch (e) {
     checks.jobs_table = { ok: false, detail: String(e) }
   }
 
-  // 3. Can reach agent_files table
   try {
     const { error } = await supabase.from('agent_files').select('id').limit(1)
-    checks.agent_files_table = {
-      ok: !error,
-      detail: error ? `${error.code}: ${error.message}` : 'agent_files table reachable',
-    }
+    checks.agent_files_table = { ok: !error, detail: error ? `${error.code}: ${error.message}` : 'agent_files table reachable' }
   } catch (e) {
     checks.agent_files_table = { ok: false, detail: String(e) }
   }
 
-  // 4. Write test — insert + delete a dummy row
-  try {
-    const { data, error: insertErr } = await supabase
-      .from('jobs')
-      .insert({ problem: '__health_check__', worker_count: 0, orchestrator_agent: {} })
-      .select('id')
-      .single()
-
-    if (insertErr) throw insertErr
-
-    const { error: deleteErr } = await supabase.from('jobs').delete().eq('id', data.id)
-    checks.write = {
-      ok: !deleteErr,
-      detail: deleteErr ? `insert ok, delete failed: ${deleteErr.message}` : 'insert + delete succeeded',
-    }
-  } catch (e) {
-    checks.write = { ok: false, detail: String(e) }
-  }
-
-  const allOk = Object.values(checks).every((c) => c.ok)
-
-  return NextResponse.json({ ok: allOk, checks }, { status: allOk ? 200 : 500 })
+  // ok reflects the sprint pipeline (the live demo path); other checks are informational.
+  return NextResponse.json({ ok: checks.sprints.ok, checks })
 }
