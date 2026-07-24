@@ -164,58 +164,86 @@ export function WorkspaceSidebar({
     }
   }
 
-  if (collapsed && !mobileOpen) {
-    return (
-      <div className="absolute left-0 top-16 bottom-0 w-12 z-20 bg-gray-950/95 border-r border-gray-800 hidden md:flex flex-col items-center py-3 transition-[width] duration-200">
-        <button
-          onClick={onToggleCollapse}
-          className="text-gray-500 hover:text-white text-sm p-1.5 rounded hover:bg-gray-900"
-          aria-label="Expand workspace sidebar"
-          title="Expand"
-        >
-          ▶
-        </button>
-      </div>
-    )
-  }
+  const isSmall = collapsed && !mobileOpen
 
   return (
-    <aside
-      className={`fixed md:absolute left-0 top-0 md:top-16 bottom-0 w-[min(20rem,88vw)] md:w-64 z-40 bg-gray-950 border-r border-gray-800 flex flex-col transition-transform duration-200 ${
-        mobileOpen
-          ? 'visible translate-x-0'
-          : 'invisible -translate-x-full md:visible md:translate-x-0'
+    <div
+      className={`fixed md:absolute left-4 top-4 z-40 overflow-hidden ${
+        mobileOpen ? 'visible' : 'invisible md:visible'
       }`}
+      style={{
+        width: isSmall ? '2.25rem' : '16rem',
+        height: isSmall ? '2.25rem' : 'calc(100dvh - 2rem)',
+        borderRadius: isSmall ? '14px' : '24px',
+        background: 'rgba(8,8,16,0.65)',
+        backdropFilter: 'blur(28px)',
+        WebkitBackdropFilter: 'blur(28px)',
+        border: '1px solid rgba(255,255,255,0.08)',
+        transition: 'width 320ms cubic-bezier(0.4,0,0.2,1), height 320ms cubic-bezier(0.4,0,0.2,1), border-radius 320ms cubic-bezier(0.4,0,0.2,1)',
+      }}
     >
-      <div className="flex items-center justify-between px-3 py-2.5 border-b border-gray-800">
+      {/* Hamburger icon — visible when collapsed */}
+      <button
+        onClick={onToggleCollapse}
+        className="absolute inset-0 flex items-center justify-center text-white/40 hover:text-white"
+        style={{
+          opacity: isSmall ? 1 : 0,
+          pointerEvents: isSmall ? 'auto' : 'none',
+          transition: 'opacity 150ms',
+        }}
+        aria-label="Open workspaces"
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <rect x="2" y="3" width="12" height="1.5" rx="0.75" fill="currentColor"/>
+          <rect x="2" y="7.25" width="12" height="1.5" rx="0.75" fill="currentColor"/>
+          <rect x="2" y="11.5" width="12" height="1.5" rx="0.75" fill="currentColor"/>
+        </svg>
+      </button>
+
+      {/* Panel content — visible when expanded */}
+      <div
+        className="flex flex-col h-full"
+        style={{
+          opacity: isSmall ? 0 : 1,
+          pointerEvents: isSmall ? 'none' : 'auto',
+          transition: isSmall ? 'opacity 100ms' : 'opacity 200ms 120ms',
+        }}
+      >
+
+      <div className="flex items-center justify-between px-3 py-2.5 flex-shrink-0" style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
         <div>
           <p className="text-sm font-semibold text-white">Workspaces</p>
           <p className="text-[11px] text-gray-500">Research operations</p>
         </div>
         <button
           onClick={onCloseMobile}
-          className="md:hidden text-gray-400 hover:text-white p-2 rounded-lg hover:bg-gray-900"
+          className="md:hidden text-gray-400 hover:text-white p-2 rounded-lg transition-colors"
+          style={{ background: 'rgba(255,255,255,0.05)' }}
           aria-label="Close workspace navigation"
         >
           Close
         </button>
         <button
           onClick={onToggleCollapse}
-          className="hidden md:block text-gray-500 hover:text-white text-sm p-1 rounded hover:bg-gray-900"
+          className="hidden md:flex h-6 w-6 items-center justify-center rounded-lg text-white/30 hover:text-white transition-colors"
+          style={{ background: 'rgba(255,255,255,0.05)' }}
           aria-label="Collapse workspace sidebar"
           title="Collapse"
         >
-          ◀
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+            <path d="M6 2L3 5l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
         </button>
       </div>
 
-      <div className="px-3 py-2.5 border-b border-gray-800">
+      <div className="px-3 py-2.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
         {!showCreate ? (
           <button
             onClick={() => setShowCreate(true)}
             disabled={!adminKey}
             title={!adminKey ? 'append ?key=ADMIN_KEY to the URL' : undefined}
-            className="w-full text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-2 rounded-lg transition-colors"
+            className="w-full text-xs font-semibold text-white disabled:opacity-50 disabled:cursor-not-allowed px-3 py-2 rounded-lg transition-colors"
+            style={{ background: 'rgba(99,102,241,0.7)', border: '1px solid rgba(99,102,241,0.4)' }}
           >
             + New question
           </button>
@@ -228,7 +256,8 @@ export function WorkspaceSidebar({
               placeholder="What should the research sprint investigate?"
               disabled={creating}
               rows={3}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-2.5 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none disabled:opacity-50"
+              className="w-full rounded-lg px-2.5 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none disabled:opacity-50"
+                style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)' }}
             />
             {creating ? (
               <div className="flex items-center gap-2 text-xs text-indigo-300 px-1 py-1.5">
@@ -240,7 +269,8 @@ export function WorkspaceSidebar({
                 <button
                   onClick={handleCreate}
                   disabled={!question.trim() || !adminKey}
-                  className="flex-1 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-1.5 rounded-lg transition-colors"
+                  className="flex-1 text-xs font-semibold text-white disabled:opacity-50 disabled:cursor-not-allowed px-3 py-1.5 rounded-lg transition-colors"
+                    style={{ background: 'rgba(99,102,241,0.7)', border: '1px solid rgba(99,102,241,0.4)' }}
                 >
                   Create
                 </button>
@@ -288,11 +318,13 @@ export function WorkspaceSidebar({
                 onSelect(w.id)
                 onCloseMobile?.()
               }}
-              className={`w-full text-left px-4 py-2.5 transition-colors border-l-2 ${
-                isSelected
-                  ? 'bg-gray-800 border-indigo-500'
-                  : 'border-transparent hover:bg-gray-900'
-              }`}
+              className="w-full text-left px-4 py-2.5 transition-colors border-l-2"
+              style={{
+                borderLeftColor: isSelected ? '#6366F1' : 'transparent',
+                background: isSelected ? 'rgba(255,255,255,0.08)' : undefined,
+              }}
+              onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
+              onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = '' }}
             >
               <p className="text-xs font-medium text-white leading-snug line-clamp-2 mb-1.5">
                 {w.question}
@@ -308,6 +340,8 @@ export function WorkspaceSidebar({
           )
         })}
       </div>
-    </aside>
+
+      </div>
+    </div>
   )
 }

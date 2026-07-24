@@ -169,7 +169,7 @@ export function WorkerPanel({
   return (
     <div
       className={`
-        absolute right-4 top-4 bottom-4 w-80 flex flex-col z-20
+        absolute right-4 top-14 bottom-4 w-80 flex flex-col z-20
         rounded-3xl overflow-hidden border border-white/10 shadow-2xl
         transition-all duration-300 ease-out
         ${isOpen ? 'translate-x-0 opacity-100' : 'translate-x-[110%] opacity-0'}
