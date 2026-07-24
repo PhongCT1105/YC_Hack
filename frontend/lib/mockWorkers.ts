@@ -1,0 +1,102 @@
+import type { Worker } from '@/types'
+
+// Desk positions: 2 rows of 3, centered in the room
+// Row back (z = -2.5): x = [-4, 0, 4]
+// Row front (z = 1.5): x = [-4, 0, 4]
+export const MOCK_WORKERS: Worker[] = [
+  {
+    id: 'w-1',
+    name: 'Alex K.',
+    teracId: 'TRC-0012',
+    subtaskTitle: 'Build JWT authentication endpoints',
+    status: 'in-progress',
+    lastMessage: 'Working on token refresh logic, about 1h left.',
+    lastUpdated: '2 min ago',
+    position: [-4, 0, -2.5],
+    messages: [
+      { id: 'm1', sender: 'agent', content: 'Hi Alex! Your task: implement POST /auth/register and POST /auth/login with JWT. Acceptance criteria in the brief.', timestamp: '14:00' },
+      { id: 'm2', sender: 'worker', content: 'Got it. Starting with the user model and password hashing first.', timestamp: '14:08' },
+      { id: 'm3', sender: 'agent', content: 'Use bcrypt with 12 rounds. Context file has the DB schema.', timestamp: '14:09' },
+      { id: 'm4', sender: 'worker', content: 'Working on token refresh logic, about 1h left.', timestamp: '14:45' },
+    ],
+  },
+  {
+    id: 'w-2',
+    name: 'Maya R.',
+    teracId: 'TRC-0034',
+    subtaskTitle: 'Design database schema for users + sessions',
+    status: 'done',
+    lastMessage: 'Schema finalized and submitted. All tables indexed.',
+    lastUpdated: '18 min ago',
+    position: [0, 0, -2.5],
+    messages: [
+      { id: 'm1', sender: 'agent', content: 'Hi Maya! Design the Postgres schema: users, sessions, refresh_tokens tables.', timestamp: '13:55' },
+      { id: 'm2', sender: 'worker', content: 'Should I use UUID or serial for primary keys?', timestamp: '14:02' },
+      { id: 'm3', sender: 'agent', content: 'Use UUID v4. Context: this is a multi-tenant app so we need tenant_id on every table.', timestamp: '14:03' },
+      { id: 'm4', sender: 'worker', content: 'Done! Schema has users, sessions, refresh_tokens, all with UUID PKs and tenant_id FK. Migrations included.', timestamp: '14:28' },
+      { id: 'm5', sender: 'agent', content: 'Terac quality gate passed. Great work!', timestamp: '14:30' },
+    ],
+  },
+  {
+    id: 'w-3',
+    name: 'Sam T.',
+    teracId: 'TRC-0051',
+    subtaskTitle: 'Write unit tests for auth module (>80% coverage)',
+    status: 'review',
+    lastMessage: 'Tests submitted — 84% coverage. Waiting on review.',
+    lastUpdated: '5 min ago',
+    position: [4, 0, -2.5],
+    messages: [
+      { id: 'm1', sender: 'agent', content: 'Hi Sam! Write pytest unit tests for the auth endpoints. Need >80% coverage.', timestamp: '14:15' },
+      { id: 'm2', sender: 'worker', content: 'Should I mock the DB or use a test DB?', timestamp: '14:22' },
+      { id: 'm3', sender: 'agent', content: 'Use pytest-mock to mock DB calls. No real DB needed for unit tests.', timestamp: '14:23' },
+      { id: 'm4', sender: 'worker', content: 'Tests submitted — 84% coverage. Waiting on review.', timestamp: '15:00' },
+    ],
+  },
+  {
+    id: 'w-4',
+    name: 'Jordan L.',
+    teracId: 'TRC-0078',
+    subtaskTitle: 'Build dashboard UI with React + Tailwind',
+    status: 'blocked',
+    lastMessage: "I don't have the Figma designs or API spec. Can't proceed.",
+    lastUpdated: '1 min ago',
+    position: [-4, 0, 1.5],
+    messages: [
+      { id: 'm1', sender: 'agent', content: "Hi Jordan! Build the user dashboard: profile page, session history, account settings.", timestamp: '14:10' },
+      { id: 'm2', sender: 'worker', content: "What's the design language? Do you have wireframes?", timestamp: '14:20' },
+      { id: 'm3', sender: 'agent', content: 'Use Tailwind, shadcn/ui components. Minimal, clean aesthetic. No wireframes but match the style in the context file.', timestamp: '14:21' },
+      { id: 'm4', sender: 'worker', content: "I don't have the API spec for the session history endpoint. Can't proceed without it.", timestamp: '14:55' },
+    ],
+  },
+  {
+    id: 'w-5',
+    name: 'Priya S.',
+    teracId: 'TRC-0099',
+    subtaskTitle: 'Set up CI/CD pipeline with GitHub Actions',
+    status: 'in-progress',
+    lastMessage: 'Pipeline runs. Working on the deploy step to Fly.io.',
+    lastUpdated: '8 min ago',
+    position: [0, 0, 1.5],
+    messages: [
+      { id: 'm1', sender: 'agent', content: 'Hi Priya! Set up GitHub Actions: lint, test, build, and deploy to Fly.io on merge to main.', timestamp: '14:05' },
+      { id: 'm2', sender: 'worker', content: 'Do we have a Fly.io account set up?', timestamp: '14:18' },
+      { id: 'm3', sender: 'agent', content: 'Yes. FLY_API_TOKEN is in the repo secrets. App name is "yc-hack-api".', timestamp: '14:19' },
+      { id: 'm4', sender: 'worker', content: 'Pipeline runs. Working on the deploy step to Fly.io.', timestamp: '14:52' },
+    ],
+  },
+  {
+    id: 'w-6',
+    name: 'Chris M.',
+    teracId: 'TRC-0103',
+    subtaskTitle: 'Write API documentation with OpenAPI/Swagger',
+    status: 'pending',
+    lastMessage: 'Standing by for task assignment.',
+    lastUpdated: '12 min ago',
+    position: [4, 0, 1.5],
+    messages: [
+      { id: 'm1', sender: 'agent', content: 'Hi Chris! Document all REST endpoints using OpenAPI 3.0. Include request/response schemas and auth requirements.', timestamp: '14:35' },
+      { id: 'm2', sender: 'worker', content: 'Standing by. Will start once I can see the implemented endpoints.', timestamp: '14:40' },
+    ],
+  },
+]
