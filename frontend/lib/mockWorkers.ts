@@ -57,6 +57,7 @@ export const MOCK_WORKERS: Worker[] = [
     id: 'w-4',
     name: 'Jordan L.',
     teracId: 'TRC-0078',
+    linqPhone: '16473271398',
     subtaskTitle: 'Build dashboard UI with React + Tailwind',
     status: 'blocked',
     lastMessage: "I don't have the Figma designs or API spec. Can't proceed.",
