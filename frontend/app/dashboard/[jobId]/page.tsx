@@ -17,14 +17,11 @@ import type { Worker } from '@/types'
 
 type LinqMessage = {
   id: string
-  sender?: string
-  from?: string
-  message: { parts: { type: string; value: string }[] }
+  is_from_me: boolean
+  parts: { type: string; value?: string }[]
+  sent_at?: string
   created_at?: string
-  sentAt?: string
 }
-
-const FROM_DIGITS = '16473271398'
 
 const MOCK_WORKSPACE: Workspace = {
   id: 'mock-001',
@@ -612,9 +609,10 @@ export default function DashboardPage({
                 </p>
               )}
               {managerMessages.map((msg) => {
-                const senderPhone = String(msg.sender ?? msg.from ?? '')
-                const isUs = senderPhone.replace(/\D/g, '').includes(FROM_DIGITS)
-                const text = msg.message?.parts?.find((p) => p.type === 'text')?.value ?? ''
+                // is_from_me = sent by the Linq account (orchestrator) → left side
+                // !is_from_me = sent by the manager (us) → right side
+                const isUs = !msg.is_from_me
+                const text = msg.parts?.find((p) => p.type === 'text')?.value ?? ''
                 return (
                   <div key={msg.id} className={`flex ${isUs ? 'justify-end' : 'justify-start'}`}>
                     <div

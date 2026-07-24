@@ -83,7 +83,6 @@ export function WorkerPanel({
     setInput('')
     setChatId(initialChatId)
 
-    if (!isLive) return
     if (!initialChatId && !worker?.linqPhone) return
     let cancelled = false
     const url = initialChatId
@@ -99,22 +98,17 @@ export function WorkerPanel({
       })
       .catch(console.error)
     return () => { cancelled = true }
-  }, [worker?.id, isLive])
+  }, [worker?.id])
 
   useEffect(() => {
-    if (!isLive || !chatId) return
+    if (!chatId) return
     const interval = setInterval(() => {
       fetchThread(chatId)
         .then((msgs) => setLocalMessages(msgs.map(rawToMessage)))
         .catch(console.error)
     }, 5000)
     return () => clearInterval(interval)
-  }, [isLive, chatId])
-
-  // Re-sync thread when fresh messages arrive for the same worker via polling
-  useEffect(() => {
-    if (worker) setLocalMessages(worker.messages)
-  }, [worker?.messages.length])
+  }, [chatId])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -128,8 +122,8 @@ export function WorkerPanel({
     setInput('')
     setSendError(null)
 
-    // Linq path: live mode + worker has a phone
-    if (isLive && worker.linqPhone) {
+    // Linq path: worker has a phone number → always use Linq
+    if (worker.linqPhone) {
       try {
         const result = await sendLinqMessage(worker.linqPhone, content, chatId ?? undefined)
         const newChatId = result.chatId
@@ -230,7 +224,7 @@ export function WorkerPanel({
             {worker.linqPhone && (
               <div className="flex justify-center mb-3">
                 <span className="text-[10px] text-white/20 font-mono bg-white/5 px-2.5 py-1 rounded-full">
-                  {isLive ? '🟢' : '⚫'} +{worker.linqPhone}
+                  +{worker.linqPhone}
                 </span>
               </div>
             )}
