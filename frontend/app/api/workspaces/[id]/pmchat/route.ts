@@ -170,8 +170,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
           const { data: current } = await db.from('sprints').select('terac_opportunity_id').eq('id', sprintId).single()
           const draftId = current?.terac_opportunity_id ?? null
           if (!canLaunchFromMessage(message, draftId)) {
-            resultContent =
-              'Launch requires a live Terac quote and explicit confirmation of the spend.'
+            resultContent = draftId
+              ? 'POLICY BLOCK (not a Terac error): the workspace app only launches when the user\'s latest message clearly approves the spend (e.g. "yes", "approve", "yes, launch it"). Ask the user to reply with a clear approval, then call launch_recruitment again on that turn.'
+              : 'POLICY BLOCK (not a Terac error): no Terac draft exists yet for this workspace. Call quote_recruitment first, then launch after the user approves.'
             isError = true
           } else {
             const launch = await launchDraft(draftId!)
