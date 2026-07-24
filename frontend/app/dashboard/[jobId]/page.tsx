@@ -1,9 +1,8 @@
 'use client'
 
 import dynamic from 'next/dynamic'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { WorkerPanel } from '@/components/WorkerPanel'
-import { MOCK_WORKERS } from '@/lib/mockWorkers'
 import { STATUS_COLORS } from '@/components/three/Minion'
 import type { Worker, WorkerStatus } from '@/types'
 
@@ -75,7 +74,7 @@ function TopBar({
   const total = workers.length
   const done = workers.filter((w) => w.status === 'done').length
   const blocked = workers.filter((w) => w.status === 'blocked').length
-  const pct = Math.round((done / total) * 100)
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0
 
   return (
     <div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between px-6 py-3 bg-gray-950/90 backdrop-blur-sm border-b border-gray-800">
@@ -164,13 +163,41 @@ function WorkerListSidebar({
 }
 
 export default function DashboardPage({ params }: { params: { jobId: string } }) {
+  const [workers, setWorkers] = useState<Worker[]>([])
   const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null)
   const [view, setView] = useState<ViewMode>('office')
-  const workers = MOCK_WORKERS
+
+  // Poll the live workers feed every 3s. Keeps the selected worker's panel
+  // in sync by re-pointing it at the fresh object with the same id.
+  useEffect(() => {
+    let cancelled = false
+
+    async function poll() {
+      try {
+        const res = await fetch('/api/workers')
+        if (!res.ok || cancelled) return
+        const fresh: Worker[] = await res.json()
+        if (cancelled) return
+        setWorkers(fresh)
+        setSelectedWorker((prev) => (prev ? fresh.find((w) => w.id === prev.id) ?? prev : prev))
+      } catch {
+        // transient network/API hiccup — next poll will retry
+      }
+    }
+
+    poll()
+    const interval = setInterval(poll, 3000)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [])
 
   const handleSelect = (worker: Worker | null) => {
     setSelectedWorker(worker)
   }
+
+  const recruiting = workers.length === 0
 
   return (
     <div className="w-screen h-screen relative overflow-hidden bg-gray-950">
@@ -178,7 +205,7 @@ export default function DashboardPage({ params }: { params: { jobId: string } })
       <TopBar workers={workers} jobId={params.jobId} view={view} onViewChange={setView} />
 
       {/* Worker list sidebar (left) — only meaningful for the office view */}
-      {view === 'office' && (
+      {!recruiting && view === 'office' && (
         <WorkerListSidebar
           workers={workers}
           selectedId={selectedWorker?.id ?? null}
@@ -186,41 +213,53 @@ export default function DashboardPage({ params }: { params: { jobId: string } })
         />
       )}
 
-      {/* Main viewport — 3D Office Scene or Live Knowledge Graph, full screen behind UI */}
-      <div className={`absolute inset-0 pt-12 ${view === 'office' ? 'pl-52' : ''}`}>
-        <div
-          className="w-full h-full"
-          style={{ paddingRight: view === 'office' && selectedWorker ? '320px' : '0' }}
-        >
-          {view === 'office' ? (
-            <OfficeScene
-              workers={workers}
-              selectedId={selectedWorker?.id ?? null}
-              onSelect={handleSelect}
-            />
-          ) : (
-            <KnowledgeGraph pollMs={3000} compact={false} />
+      {recruiting ? (
+        /* Recruiting overlay — no researchers have joined the sprint yet */
+        <div className="absolute inset-0 pt-12 flex items-center justify-center">
+          <div className="text-center">
+            <div className="text-4xl mb-4 animate-pulse">🧑‍💼</div>
+            <p className="text-gray-400 text-sm">Recruiting… no researchers have arrived yet</p>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Main viewport — 3D Office Scene or Live Knowledge Graph, full screen behind UI */}
+          <div className={`absolute inset-0 pt-12 ${view === 'office' ? 'pl-52' : ''}`}>
+            <div
+              className="w-full h-full"
+              style={{ paddingRight: view === 'office' && selectedWorker ? '320px' : '0' }}
+            >
+              {view === 'office' ? (
+                <OfficeScene
+                  workers={workers}
+                  selectedId={selectedWorker?.id ?? null}
+                  onSelect={handleSelect}
+                />
+              ) : (
+                <KnowledgeGraph pollMs={3000} compact={false} />
+              )}
+            </div>
+          </div>
+
+          {/* Worker detail panel (right slide-in) — office view only */}
+          {view === 'office' && (
+            <div className="absolute right-0 top-0 h-full" style={{ width: '320px' }}>
+              <WorkerPanel
+                worker={selectedWorker}
+                onClose={() => setSelectedWorker(null)}
+              />
+            </div>
           )}
-        </div>
-      </div>
 
-      {/* Worker detail panel (right slide-in) — office view only */}
-      {view === 'office' && (
-        <div className="absolute right-0 top-0 h-full" style={{ width: '320px' }}>
-          <WorkerPanel
-            worker={selectedWorker}
-            onClose={() => setSelectedWorker(null)}
-          />
-        </div>
-      )}
-
-      {/* Click hint — fades when a worker is selected, office view only */}
-      {view === 'office' && !selectedWorker && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
-          <p className="text-xs text-gray-600 bg-gray-950/80 px-4 py-2 rounded-full border border-gray-800">
-            Click a minion to inspect
-          </p>
-        </div>
+          {/* Click hint — fades when a worker is selected, office view only */}
+          {view === 'office' && !selectedWorker && (
+            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
+              <p className="text-xs text-gray-600 bg-gray-950/80 px-4 py-2 rounded-full border border-gray-800">
+                Click a minion to inspect
+              </p>
+            </div>
+          )}
+        </>
       )}
     </div>
   )

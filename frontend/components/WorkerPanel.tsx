@@ -35,11 +35,17 @@ export function WorkerPanel({
   const [localMessages, setLocalMessages] = useState(worker?.messages ?? [])
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  // Sync messages when worker changes
+  // Reset thread + draft when switching to a different worker
   useEffect(() => {
     setLocalMessages(worker?.messages ?? [])
     setInput('')
   }, [worker?.id])
+
+  // Re-sync the thread when fresh messages arrive for the *same* worker
+  // (e.g. a new poll of /api/workers picked up a new chat message).
+  useEffect(() => {
+    if (worker) setLocalMessages(worker.messages)
+  }, [worker?.messages.length])
 
   // Auto-scroll to bottom
   useEffect(() => {
