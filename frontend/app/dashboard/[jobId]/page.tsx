@@ -20,6 +20,21 @@ const OfficeScene = dynamic(() => import('@/components/three/OfficeScene'), {
   ),
 })
 
+// React Flow also needs to be client-only (no SSR)
+const KnowledgeGraph = dynamic(() => import('@/components/graph/KnowledgeGraph'), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-full flex items-center justify-center bg-gray-950">
+      <div className="text-center">
+        <div className="text-4xl mb-4 animate-bounce">🕸️</div>
+        <p className="text-gray-400 text-sm">Loading graph...</p>
+      </div>
+    </div>
+  ),
+})
+
+type ViewMode = 'office' | 'graph'
+
 const STATUS_LABELS: Record<WorkerStatus, string> = {
   pending: 'Pending',
   'in-progress': 'Working',
@@ -28,7 +43,35 @@ const STATUS_LABELS: Record<WorkerStatus, string> = {
   blocked: 'Blocked',
 }
 
-function TopBar({ workers, jobId }: { workers: Worker[]; jobId: string }) {
+function ViewToggle({ view, onChange }: { view: ViewMode; onChange: (v: ViewMode) => void }) {
+  return (
+    <div className="flex items-center bg-gray-900 border border-gray-700 rounded-full p-0.5 text-xs">
+      {(['office', 'graph'] as ViewMode[]).map((v) => (
+        <button
+          key={v}
+          onClick={() => onChange(v)}
+          className={`px-3 py-1 rounded-full capitalize transition-colors ${
+            view === v ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-gray-200'
+          }`}
+        >
+          {v}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function TopBar({
+  workers,
+  jobId,
+  view,
+  onViewChange,
+}: {
+  workers: Worker[]
+  jobId: string
+  view: ViewMode
+  onViewChange: (v: ViewMode) => void
+}) {
   const total = workers.length
   const done = workers.filter((w) => w.status === 'done').length
   const blocked = workers.filter((w) => w.status === 'blocked').length
@@ -42,6 +85,7 @@ function TopBar({ workers, jobId }: { workers: Worker[]; jobId: string }) {
         <span className="text-xs text-gray-500 border border-gray-700 px-2 py-0.5 rounded-full">
           {jobId}
         </span>
+        <ViewToggle view={view} onChange={onViewChange} />
       </div>
 
       {/* Center: progress */}
@@ -121,6 +165,7 @@ function WorkerListSidebar({
 
 export default function DashboardPage({ params }: { params: { jobId: string } }) {
   const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null)
+  const [view, setView] = useState<ViewMode>('office')
   const workers = MOCK_WORKERS
 
   const handleSelect = (worker: Worker | null) => {
@@ -130,39 +175,47 @@ export default function DashboardPage({ params }: { params: { jobId: string } })
   return (
     <div className="w-screen h-screen relative overflow-hidden bg-gray-950">
       {/* Top navigation bar */}
-      <TopBar workers={workers} jobId={params.jobId} />
+      <TopBar workers={workers} jobId={params.jobId} view={view} onViewChange={setView} />
 
-      {/* Worker list sidebar (left) */}
-      <WorkerListSidebar
-        workers={workers}
-        selectedId={selectedWorker?.id ?? null}
-        onSelect={handleSelect}
-      />
+      {/* Worker list sidebar (left) — only meaningful for the office view */}
+      {view === 'office' && (
+        <WorkerListSidebar
+          workers={workers}
+          selectedId={selectedWorker?.id ?? null}
+          onSelect={handleSelect}
+        />
+      )}
 
-      {/* 3D Office Scene — full screen behind UI */}
-      <div className="absolute inset-0 pt-12 pl-52">
+      {/* Main viewport — 3D Office Scene or Live Knowledge Graph, full screen behind UI */}
+      <div className={`absolute inset-0 pt-12 ${view === 'office' ? 'pl-52' : ''}`}>
         <div
           className="w-full h-full"
-          style={{ paddingRight: selectedWorker ? '320px' : '0' }}
+          style={{ paddingRight: view === 'office' && selectedWorker ? '320px' : '0' }}
         >
-          <OfficeScene
-            workers={workers}
-            selectedId={selectedWorker?.id ?? null}
-            onSelect={handleSelect}
-          />
+          {view === 'office' ? (
+            <OfficeScene
+              workers={workers}
+              selectedId={selectedWorker?.id ?? null}
+              onSelect={handleSelect}
+            />
+          ) : (
+            <KnowledgeGraph pollMs={3000} compact={false} />
+          )}
         </div>
       </div>
 
-      {/* Worker detail panel (right slide-in) */}
-      <div className="absolute right-0 top-0 h-full" style={{ width: '320px' }}>
-        <WorkerPanel
-          worker={selectedWorker}
-          onClose={() => setSelectedWorker(null)}
-        />
-      </div>
+      {/* Worker detail panel (right slide-in) — office view only */}
+      {view === 'office' && (
+        <div className="absolute right-0 top-0 h-full" style={{ width: '320px' }}>
+          <WorkerPanel
+            worker={selectedWorker}
+            onClose={() => setSelectedWorker(null)}
+          />
+        </div>
+      )}
 
-      {/* Click hint — fades when a worker is selected */}
-      {!selectedWorker && (
+      {/* Click hint — fades when a worker is selected, office view only */}
+      {view === 'office' && !selectedWorker && (
         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
           <p className="text-xs text-gray-600 bg-gray-950/80 px-4 py-2 rounded-full border border-gray-800">
             Click a minion to inspect
