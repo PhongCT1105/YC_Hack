@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { computeCriteria } from '@/lib/criteria'
 import { finishSubmission } from '@/lib/finishSubmission'
+import { getPeerClaims, getReviewsDone } from '@/lib/peerReview'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -40,7 +41,11 @@ export async function POST(req: Request) {
     .eq('subtask_id', subtask.id)
   if (findingsError) return NextResponse.json({ error: findingsError.message }, { status: 500 })
 
-  const criteria = computeCriteria(findings ?? [])
+  const [peerClaims, reviewsDone] = await Promise.all([
+    getPeerClaims(participant.sprint_id, submissionId),
+    getReviewsDone(submissionId),
+  ])
+  const criteria = computeCriteria(findings ?? [], { peerClaimsAvailable: peerClaims.length, reviewsDone })
   if (!criteria.met) {
     return NextResponse.json({ error: 'criteria not met yet', criteria }, { status: 400 })
   }

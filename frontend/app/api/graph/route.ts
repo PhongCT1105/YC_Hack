@@ -37,12 +37,36 @@ export async function GET(req: Request) {
   const { data: participants } = await db.from('participants').select('submission_id,codename,kind').eq('sprint_id', sprint.id)
   const who = new Map((participants ?? []).map((p) => [p.submission_id, p]))
 
+  const findingIds = (findings ?? []).map((f) => f.id)
+  const { data: reviews } = findingIds.length
+    ? await db.from('claim_reviews').select('finding_id,verdict').in('finding_id', findingIds)
+    : { data: [] }
+  const endorsements = new Map<string, number>()
+  const disputes = new Map<string, number>()
+  for (const r of reviews ?? []) {
+    if (r.verdict === 'agree') endorsements.set(r.finding_id, (endorsements.get(r.finding_id) ?? 0) + 1)
+    else if (r.verdict === 'disagree') disputes.set(r.finding_id, (disputes.get(r.finding_id) ?? 0) + 1)
+  }
+
   const nodes = [
     { id: sprint.id, type: 'question', label: sprint.question, meta: {} },
     ...(subtasks ?? []).map((s) => ({ id: s.id, type: 'subtask', label: s.title, meta: { status: s.status } })),
     ...(findings ?? []).map((f) => {
       const p = who.get(f.submission_id)
-      return { id: f.id, type: 'finding', label: f.text, meta: { confidence: f.confidence, kind: f.kind, source_url: f.source_url, codename: p?.codename ?? '?', simulated: p?.kind === 'simulated' } }
+      return {
+        id: f.id,
+        type: 'finding',
+        label: f.text,
+        meta: {
+          confidence: f.confidence,
+          kind: f.kind,
+          source_url: f.source_url,
+          codename: p?.codename ?? '?',
+          simulated: p?.kind === 'simulated',
+          endorsements: endorsements.get(f.id) ?? 0,
+          disputes: disputes.get(f.id) ?? 0,
+        },
+      }
     }),
   ]
   const edges = [

@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { chatReply, extractFindings } from '@/lib/agent'
 import { buildGraphSummary } from '@/lib/graphSummary'
 import { computeCriteria, type Criteria } from '@/lib/criteria'
+import { getPeerClaims, getReviewsDone } from '@/lib/peerReview'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -23,6 +24,8 @@ export async function POST(req: Request) {
 
   await db.from('messages').insert({ submission_id: submissionId, sender: 'worker', content: message })
 
+  const peerClaims = await getPeerClaims(participant.sprint_id, submissionId)
+
   const reply = await chatReply({
     question: sprint.question,
     subtaskTitle: subtask?.title ?? 'general help',
@@ -31,6 +34,7 @@ export async function POST(req: Request) {
     graphSummary: await buildGraphSummary(participant.sprint_id),
     history: (history ?? []).reverse().map((m) => ({ sender: m.sender, content: m.content })),
     userMessage: message,
+    peerFindings: peerClaims.map((p) => ({ codename: p.codename, text: p.text })),
   })
   await db.from('messages').insert({ submission_id: submissionId, sender: 'agent', content: reply })
 
@@ -57,7 +61,8 @@ export async function POST(req: Request) {
           kind: f.kind,
         })))
       }
-      criteria = computeCriteria(findings)
+      const reviewsDone = await getReviewsDone(submissionId)
+      criteria = computeCriteria(findings, { peerClaimsAvailable: peerClaims.length, reviewsDone })
     } catch (e) {
       console.error('extractFindings failed', e)
     }

@@ -36,8 +36,17 @@ type Criteria = {
   claims: CriteriaBucket
   sourced: CriteriaBucket
   opinion: CriteriaBucket
+  peerReview: CriteriaBucket
   met: boolean
 } | null
+
+type PeerClaim = {
+  id: string
+  text: string
+  source_url: string | null
+  codename: string
+  subtaskTitle: string
+}
 
 type Phase = 'loading' | 'no-id' | 'exhausted' | 'join-error' | 'ready'
 
@@ -79,7 +88,7 @@ function criteriaMet(bucket: CriteriaBucket) {
 
 function overallFraction(criteria: Criteria): number {
   if (!criteria) return 0
-  const buckets = [criteria.claims, criteria.sourced, criteria.opinion]
+  const buckets = [criteria.claims, criteria.sourced, criteria.opinion, criteria.peerReview]
   const metCount = buckets.filter(criteriaMet).length
   return metCount / buckets.length
 }
@@ -100,6 +109,11 @@ export default function WorkspaceClient() {
   const [subtask, setSubtask] = useState<Subtask>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [criteria, setCriteria] = useState<Criteria>(null)
+  const [peerClaims, setPeerClaims] = useState<PeerClaim[]>([])
+  const [reviewingVerdict, setReviewingVerdict] = useState<'agree' | 'disagree' | 'skip' | null>(null)
+  const [disagreeOpen, setDisagreeOpen] = useState(false)
+  const [disagreeReason, setDisagreeReason] = useState('')
+  const [reviewError, setReviewError] = useState('')
 
   const [chatInput, setChatInput] = useState('')
   const [chatSending, setChatSending] = useState(false)
@@ -126,6 +140,7 @@ export default function WorkspaceClient() {
       setSubtask(data.subtask)
       setMessages(data.messages ?? [])
       setCriteria(data.criteria ?? null)
+      setPeerClaims(data.peerClaims ?? [])
     } catch {
       setStateError('Could not reach the server to refresh state.')
     }
@@ -227,6 +242,34 @@ export default function WorkspaceClient() {
     }
   }
 
+  async function submitReview(claim: PeerClaim, verdict: 'agree' | 'disagree' | 'skip', comment?: string) {
+    if (!submissionId) return
+    setReviewError('')
+    setReviewingVerdict(verdict)
+    try {
+      const res = await fetch('/api/sprint/review', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ submissionId, findingId: claim.id, verdict, comment }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setReviewError(data.error || 'Could not submit review.')
+        return
+      }
+      // Optimistically drop this claim; the next poll will bring in the next one.
+      setPeerClaims((prev) => prev.filter((c) => c.id !== claim.id))
+      setDisagreeOpen(false)
+      setDisagreeReason('')
+      if (data.criteria) setCriteria(data.criteria)
+      await fetchState()
+    } catch {
+      setReviewError('Could not reach the server. Please try again.')
+    } finally {
+      setReviewingVerdict(null)
+    }
+  }
+
   async function handleFinish() {
     if (!submissionId || !criteria?.met) return
     setFinishError('')
@@ -303,7 +346,9 @@ export default function WorkspaceClient() {
   const claimsMet = criteria ? criteriaMet(criteria.claims) : false
   const sourcedMet = criteria ? criteriaMet(criteria.sourced) : false
   const opinionMet = criteria ? criteriaMet(criteria.opinion) : false
+  const peerReviewMet = criteria ? criteriaMet(criteria.peerReview) : false
   const progress = overallFraction(criteria)
+  const activeClaim = peerClaims[0] ?? null
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-200">
@@ -411,6 +456,17 @@ export default function WorkspaceClient() {
                 >
                   💭 Your take {criteria?.opinion.have ?? 0}/{criteria?.opinion.need ?? 1}
                 </span>
+                {criteria && criteria.peerReview.need > 0 && (
+                  <span
+                    className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full border transition-colors ${
+                      peerReviewMet
+                        ? 'bg-green-950/60 border-green-700 text-green-300'
+                        : 'bg-gray-800 border-gray-700 text-gray-300'
+                    }`}
+                  >
+                    🤝 Peer review {criteria.peerReview.have}/{criteria.peerReview.need}
+                  </span>
+                )}
               </div>
               <div className="h-1 w-full bg-gray-800 rounded-full overflow-hidden">
                 <div
@@ -446,6 +502,80 @@ export default function WorkspaceClient() {
                 </button>
               )}
             </div>
+
+            {/* Peer claim card — non-blocking, sits above chat, chat stays usable */}
+            {activeClaim && (
+              <div className="border-2 border-amber-600/70 bg-gradient-to-br from-amber-950/40 to-violet-950/30 rounded-2xl p-4 space-y-3">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-amber-300">
+                  Peer claim — {activeClaim.codename} on &ldquo;{activeClaim.subtaskTitle}&rdquo;
+                </p>
+                <p className="text-sm text-gray-100 leading-relaxed">{activeClaim.text}</p>
+                {activeClaim.source_url && (
+                  <a
+                    href={activeClaim.source_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-blue-400 underline break-all"
+                  >
+                    {activeClaim.source_url}
+                  </a>
+                )}
+                {reviewError && <p className="text-xs text-red-400">{reviewError}</p>}
+                {!disagreeOpen ? (
+                  <div className="flex gap-2 flex-wrap">
+                    <button
+                      onClick={() => submitReview(activeClaim, 'agree')}
+                      disabled={reviewingVerdict !== null}
+                      className="min-h-9 px-3 rounded-lg text-xs font-semibold bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white transition-colors"
+                    >
+                      Agree 👍
+                    </button>
+                    <button
+                      onClick={() => setDisagreeOpen(true)}
+                      disabled={reviewingVerdict !== null}
+                      className="min-h-9 px-3 rounded-lg text-xs font-semibold bg-red-800 hover:bg-red-700 disabled:opacity-50 text-white transition-colors"
+                    >
+                      Disagree 👎
+                    </button>
+                    <button
+                      onClick={() => submitReview(activeClaim, 'skip')}
+                      disabled={reviewingVerdict !== null}
+                      className="min-h-9 px-3 rounded-lg text-xs font-semibold bg-gray-800 hover:bg-gray-700 border border-gray-700 disabled:opacity-50 text-gray-300 transition-colors"
+                    >
+                      Skip
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <input
+                      className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-500/60"
+                      placeholder="One-line reason for disagreeing…"
+                      value={disagreeReason}
+                      onChange={(e) => setDisagreeReason(e.target.value)}
+                      autoFocus
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => submitReview(activeClaim, 'disagree', disagreeReason.trim())}
+                        disabled={!disagreeReason.trim() || reviewingVerdict !== null}
+                        className="min-h-9 px-3 rounded-lg text-xs font-semibold bg-red-700 hover:bg-red-600 disabled:opacity-40 text-white transition-colors"
+                      >
+                        Confirm disagree
+                      </button>
+                      <button
+                        onClick={() => {
+                          setDisagreeOpen(false)
+                          setDisagreeReason('')
+                        }}
+                        className="min-h-9 px-3 rounded-lg text-xs font-semibold bg-gray-800 border border-gray-700 text-gray-300 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Chat panel */}
             <div className="bg-gray-900 border border-gray-800 rounded-2xl flex flex-col overflow-hidden">

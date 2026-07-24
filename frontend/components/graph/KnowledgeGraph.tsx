@@ -144,6 +144,8 @@ function FindingNode({
   codename?: string
   simulated?: boolean
   compact?: boolean
+  endorsements?: number
+  disputes?: number
 }>) {
   const borderColor = CONFIDENCE_BORDER[data.confidence] ?? 'border-gray-500'
 
@@ -169,6 +171,16 @@ function FindingNode({
         )}
       </div>
       <div className="leading-snug">{data.label}</div>
+      {((data.endorsements ?? 0) > 0 || (data.disputes ?? 0) > 0) && (
+        <div className="flex items-center gap-1.5 mt-1 text-[9px]">
+          {(data.endorsements ?? 0) > 0 && (
+            <span className="text-green-400">👍{data.endorsements}</span>
+          )}
+          {(data.disputes ?? 0) > 0 && (
+            <span className="text-red-400">👎{data.disputes}</span>
+          )}
+        </div>
+      )}
       <Handle type="source" position={Position.Bottom} />
     </div>
   )

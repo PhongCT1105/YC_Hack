@@ -4,6 +4,14 @@ import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
 
 const client = new Anthropic() // reads ANTHROPIC_API_KEY
 const MODEL = 'claude-opus-5'
+// Worker-facing calls (chatReply, extractFindings) run on every chat turn for
+// every participant — high volume, low-stakes-per-call. Haiku is far cheaper
+// and fast enough for interview chat + extraction; the heavier planning/
+// synthesis calls (decomposeQuestion, synthesize, classifyEdges) stay on
+// Opus since they run once per sprint/subtask and need stronger reasoning.
+// Haiku doesn't support the same `effort` tuning as Opus, so it's omitted
+// entirely on these two calls rather than risk an unsupported param.
+const WORKER_MODEL = 'claude-haiku-4-5'
 
 const DecompositionSchema = z.object({
   subtasks: z.array(z.object({
@@ -34,17 +42,26 @@ export type ChatCtx = {
   graphSummary: string
   history: { sender: 'agent' | 'worker'; content: string }[]
   userMessage: string
+  peerFindings?: { codename: string; text: string }[]
 }
 
 export async function chatReply(ctx: ChatCtx): Promise<string> {
+  const peerLines = (ctx.peerFindings ?? [])
+    .map((p) => `- ${p.codename}: ${p.text}`)
+    .join('\n')
   const res = await client.messages.create({
-    model: MODEL,
+    model: WORKER_MODEL,
     max_tokens: 1024,
-    output_config: { effort: 'low' },
     system:
       `You are the coordinator agent running a live, chat-first research interview. Sprint question: "${ctx.question}". ` +
       `You are interviewing researcher "${ctx.codename}" on their assigned subtask: "${ctx.subtaskTitle}" — ${ctx.subtaskBrief}. ` +
       `Findings so far from other researchers:\n${ctx.graphSummary}\n` +
+      (peerLines
+        ? `Peer claims awaiting review from ${ctx.codename}:\n${peerLines}\n` +
+          'When it fits naturally, reference ONE of these peer findings by the author\'s codename and ask whether ' +
+          'the worker agrees, can build on it, or has research that contradicts it — but do not force this every turn. ' +
+          'There is a separate card in the UI for actually reviewing peer claims, so just nudge them toward it in conversation.\n'
+        : '') +
       'There is no findings form — everything happens in this chat. Interview them like a sharp editor: ' +
       'ask what they found AND what they personally think about it (their take, their read on it, not just facts). ' +
       'Every time they state a claim or fact, press them for a source URL for that specific claim ("what\'s your source for that? paste the URL"). ' +
@@ -86,9 +103,9 @@ export type ExtractedFinding = z.infer<typeof ExtractedFindingSchema>
 
 export async function extractFindings(ctx: ExtractCtx): Promise<{ findings: ExtractedFinding[] }> {
   const res = await client.messages.parse({
-    model: MODEL,
+    model: WORKER_MODEL,
     max_tokens: 4096,
-    output_config: { effort: 'low', format: zodOutputFormat(ExtractFindingsSchema) },
+    output_config: { format: zodOutputFormat(ExtractFindingsSchema) },
     system:
       `You extract structured findings from a research-interview chat transcript. ` +
       `Sprint question: "${ctx.question}". Subtask: "${ctx.subtaskTitle}" — ${ctx.subtaskBrief}. ` +
