@@ -31,19 +31,13 @@ type Message = {
   ts: string
 }
 
-type Confidence = 'low' | 'medium' | 'high'
-type Kind = 'fact' | 'interpretation' | 'hypothesis'
-
-type FindingRow = {
-  text: string
-  source_url: string
-  confidence: Confidence
-  kind: Kind
-}
-
-function emptyRow(): FindingRow {
-  return { text: '', source_url: '', confidence: 'medium', kind: 'fact' }
-}
+type CriteriaBucket = { have: number; need: number }
+type Criteria = {
+  claims: CriteriaBucket
+  sourced: CriteriaBucket
+  opinion: CriteriaBucket
+  met: boolean
+} | null
 
 type Phase = 'loading' | 'no-id' | 'exhausted' | 'join-error' | 'ready'
 
@@ -79,6 +73,17 @@ function HoldingCard({
   )
 }
 
+function criteriaMet(bucket: CriteriaBucket) {
+  return bucket.have >= bucket.need
+}
+
+function overallFraction(criteria: Criteria): number {
+  if (!criteria) return 0
+  const buckets = [criteria.claims, criteria.sourced, criteria.opinion]
+  const metCount = buckets.filter(criteriaMet).length
+  return metCount / buckets.length
+}
+
 export default function WorkspaceClient() {
   const searchParams = useSearchParams()
   const submissionId = searchParams.get('submissionId') || searchParams.get('teracSubmissionId')
@@ -88,23 +93,23 @@ export default function WorkspaceClient() {
   const [joinError, setJoinError] = useState('')
   const [stateError, setStateError] = useState('')
   const [chatError, setChatError] = useState('')
-  const [submitError, setSubmitError] = useState('')
+  const [finishError, setFinishError] = useState('')
 
   const [participant, setParticipant] = useState<Participant | null>(null)
   const [sprint, setSprint] = useState<Sprint | null>(null)
   const [subtask, setSubtask] = useState<Subtask>(null)
   const [messages, setMessages] = useState<Message[]>([])
-  const [findingsCount, setFindingsCount] = useState(0)
+  const [criteria, setCriteria] = useState<Criteria>(null)
 
   const [chatInput, setChatInput] = useState('')
   const [chatSending, setChatSending] = useState(false)
 
-  const [rows, setRows] = useState<FindingRow[]>([emptyRow(), emptyRow()])
-  const [submitting, setSubmitting] = useState(false)
-  const [submittedLocally, setSubmittedLocally] = useState(false)
+  const [finishing, setFinishing] = useState(false)
+  const [finishedLocally, setFinishedLocally] = useState(false)
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const chatContainerRef = useRef<HTMLDivElement>(null)
+  const prevMessageCountRef = useRef(0)
 
   const fetchState = useCallback(async () => {
     if (!submissionId) return
@@ -120,7 +125,7 @@ export default function WorkspaceClient() {
       setSprint(data.sprint)
       setSubtask(data.subtask)
       setMessages(data.messages ?? [])
-      setFindingsCount(data.findingsCount ?? 0)
+      setCriteria(data.criteria ?? null)
     } catch {
       setStateError('Could not reach the server to refresh state.')
     }
@@ -173,12 +178,23 @@ export default function WorkspaceClient() {
     }
   }, [phase, fetchState])
 
-  // Auto-scroll chat to bottom on new messages
+  // Auto-scroll ONLY the chat container, and ONLY when new messages arrived,
+  // and ONLY if the user was already near the bottom — never yank the whole
+  // page and never fight a manual scroll-up while reading history.
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    const container = chatContainerRef.current
+    if (!container) return
+    const prevCount = prevMessageCountRef.current
+    prevMessageCountRef.current = messages.length
+    if (messages.length <= prevCount) return
+
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight
+    if (distanceFromBottom <= 120) {
+      container.scrollTop = container.scrollHeight
+    }
   }, [messages])
 
-  const isDone = submittedLocally || subtask?.status === 'submitted'
+  const isDone = finishedLocally || subtask?.status === 'submitted'
 
   async function handleSend() {
     const text = chatInput.trim()
@@ -200,6 +216,8 @@ export default function WorkspaceClient() {
       const data = await res.json()
       if (!res.ok) {
         setChatError(data.error || 'Message failed to send.')
+      } else if (data.criteria) {
+        setCriteria(data.criteria)
       }
     } catch {
       setChatError('Could not reach the server. Your message may not have sent.')
@@ -209,47 +227,31 @@ export default function WorkspaceClient() {
     }
   }
 
-  function updateRow(i: number, patch: Partial<FindingRow>) {
-    setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)))
-  }
-
-  function addRow() {
-    setRows((prev) => [...prev, emptyRow()])
-  }
-
-  function removeRow(i: number) {
-    setRows((prev) => (prev.length <= 2 ? prev : prev.filter((_, idx) => idx !== i)))
-  }
-
-  async function handleSubmit() {
-    if (!submissionId) return
-    const valid = rows.filter((r) => r.text.trim() && r.source_url.trim())
-    if (valid.length < 2) {
-      setSubmitError('Please fill in at least 2 findings, each with text and a source URL.')
-      return
-    }
-    setSubmitError('')
-    setSubmitting(true)
+  async function handleFinish() {
+    if (!submissionId || !criteria?.met) return
+    setFinishError('')
+    setFinishing(true)
     try {
-      const res = await fetch('/api/sprint/submit', {
+      const res = await fetch('/api/sprint/finish', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ submissionId, findings: valid }),
+        body: JSON.stringify({ submissionId }),
       })
       const data = await res.json()
       if (!res.ok) {
-        setSubmitError(data.error || 'Submit failed. Please try again.')
+        setFinishError(data.error || 'Could not finish yet. Please try again.')
+        if (data.criteria) setCriteria(data.criteria)
         return
       }
       if (data.redirect) {
         window.location.href = data.redirect
         return
       }
-      setSubmittedLocally(true)
+      setFinishedLocally(true)
     } catch {
-      setSubmitError('Could not reach the server. Please try again.')
+      setFinishError('Could not reach the server. Please try again.')
     } finally {
-      setSubmitting(false)
+      setFinishing(false)
     }
   }
 
@@ -298,13 +300,10 @@ export default function WorkspaceClient() {
 
   // phase === 'ready'
 
-  // Derived presentation values do not affect submit or validation logic.
-  const validFindingsCount = rows.filter((r) => r.text.trim() && r.source_url.trim()).length
-  const steps = [
-    { label: 'Get assignment', done: true, current: false },
-    { label: 'Research', done: isDone || validFindingsCount >= 2, current: !isDone && validFindingsCount < 2 },
-    { label: 'Submit findings', done: isDone, current: !isDone && validFindingsCount >= 2 },
-  ]
+  const claimsMet = criteria ? criteriaMet(criteria.claims) : false
+  const sourcedMet = criteria ? criteriaMet(criteria.sourced) : false
+  const opinionMet = criteria ? criteriaMet(criteria.opinion) : false
+  const progress = overallFraction(criteria)
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-200">
@@ -343,37 +342,6 @@ export default function WorkspaceClient() {
           </div>
         </div>
 
-        {/* Progress strip */}
-        <div className="flex items-start">
-          {steps.map((step, idx) => (
-            <div key={step.label} className="flex items-center flex-1 last:flex-none">
-              <div className="flex flex-col items-center gap-1.5 w-16 sm:w-20">
-                <div
-                  className={`h-7 w-7 shrink-0 rounded-full flex items-center justify-center text-xs font-bold border transition-colors ${
-                    step.done
-                      ? 'bg-blue-600 border-blue-500 text-white'
-                      : step.current
-                        ? 'bg-blue-950 border-blue-500 text-blue-300'
-                        : 'bg-gray-900 border-gray-700 text-gray-500'
-                  }`}
-                >
-                  {step.done ? '✓' : idx + 1}
-                </div>
-                <span
-                  className={`text-[10px] text-center leading-tight ${
-                    step.done || step.current ? 'text-gray-300' : 'text-gray-600'
-                  }`}
-                >
-                  {step.label}
-                </span>
-              </div>
-              {idx < steps.length - 1 && (
-                <div className={`h-px flex-1 mx-1 mb-4 ${step.done ? 'bg-blue-600' : 'bg-gray-800'}`} />
-              )}
-            </div>
-          ))}
-        </div>
-
         {stateError && (
           <p className="text-xs text-red-400 bg-red-950/40 border border-red-900 rounded-lg px-3 py-2">
             {stateError}
@@ -396,7 +364,7 @@ export default function WorkspaceClient() {
             <p className="text-sm text-gray-400 leading-relaxed">{subtask.brief}</p>
             <div className="flex items-start gap-2 mt-3 pt-3 border-t border-gray-800/80 text-xs text-gray-500">
               <span aria-hidden>💡</span>
-              <span>Cite a source URL for every claim. The agent checks them.</span>
+              <span>Chat with the coordinator below — no forms. Share what you found, cite sources, and give your own take.</span>
             </div>
           </div>
         )}
@@ -413,6 +381,72 @@ export default function WorkspaceClient() {
           </div>
         ) : (
           <>
+            {/* Standards bar — sticky criteria chips + progress */}
+            <div className="sticky top-2 z-10 bg-gray-900/95 backdrop-blur border border-gray-800 rounded-2xl p-3.5 space-y-3 shadow-lg shadow-black/20">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span
+                  className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full border transition-colors ${
+                    claimsMet
+                      ? 'bg-green-950/60 border-green-700 text-green-300'
+                      : 'bg-gray-800 border-gray-700 text-gray-300'
+                  }`}
+                >
+                  📌 Findings {criteria?.claims.have ?? 0}/{criteria?.claims.need ?? 2}
+                </span>
+                <span
+                  className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full border transition-colors ${
+                    sourcedMet
+                      ? 'bg-green-950/60 border-green-700 text-green-300'
+                      : 'bg-gray-800 border-gray-700 text-gray-300'
+                  }`}
+                >
+                  🔗 Sources {criteria?.sourced.have ?? 0}/{criteria?.sourced.need ?? 2}
+                </span>
+                <span
+                  className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full border transition-colors ${
+                    opinionMet
+                      ? 'bg-green-950/60 border-green-700 text-green-300'
+                      : 'bg-gray-800 border-gray-700 text-gray-300'
+                  }`}
+                >
+                  💭 Your take {criteria?.opinion.have ?? 0}/{criteria?.opinion.need ?? 1}
+                </span>
+              </div>
+              <div className="h-1 w-full bg-gray-800 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-blue-500 to-green-500 transition-all duration-500"
+                  style={{ width: `${Math.round(progress * 100)}%` }}
+                />
+              </div>
+
+              {finishError && (
+                <p className="text-xs text-red-400 bg-red-950/40 border border-red-900 rounded-lg px-3 py-2">
+                  {finishError}
+                </p>
+              )}
+
+              {criteria?.met ? (
+                <button
+                  onClick={handleFinish}
+                  disabled={finishing}
+                  className="w-full min-h-11 bg-gradient-to-r from-green-600 to-emerald-500 hover:from-green-500 hover:to-emerald-400 disabled:opacity-60 disabled:cursor-not-allowed text-white py-2.5 rounded-xl text-sm font-semibold transition-all shadow-lg shadow-green-950/50 flex items-center justify-center gap-2"
+                >
+                  {finishing && (
+                    <span className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                  )}
+                  {finishing ? 'Finishing…' : 'Finish job ✓'}
+                </button>
+              ) : (
+                <button
+                  disabled
+                  title="keep chatting — the coordinator needs 2 sourced findings and your take"
+                  className="w-full min-h-11 bg-gray-800 border border-gray-700 text-gray-500 py-2.5 rounded-xl text-sm font-semibold cursor-not-allowed"
+                >
+                  Finish job ✓
+                </button>
+              )}
+            </div>
+
             {/* Chat panel */}
             <div className="bg-gray-900 border border-gray-800 rounded-2xl flex flex-col overflow-hidden">
               <div className="flex items-center gap-2 px-4 pt-4 pb-3 border-b border-gray-800/80">
@@ -421,10 +455,10 @@ export default function WorkspaceClient() {
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-white leading-none">Coordinator</p>
-                  <p className="text-[11px] text-gray-500 mt-1">Ask about the task, sources, or scope</p>
+                  <p className="text-[11px] text-gray-500 mt-1">Tell it what you found, your take, and sources</p>
                 </div>
               </div>
-              <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 max-h-80 min-h-[10rem]">
+              <div ref={chatContainerRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3 max-h-[28rem] min-h-[16rem]">
                 {messages.length === 0 && (
                   <p className="text-xs text-gray-600 text-center py-6">No messages yet. Say hello.</p>
                 )}
@@ -449,14 +483,13 @@ export default function WorkspaceClient() {
                     </div>
                   )
                 })}
-                <div ref={messagesEndRef} />
               </div>
               <div className="p-3 border-t border-gray-800/80">
                 {chatError && <p className="text-xs text-red-400 mb-1.5">{chatError}</p>}
                 <div className="flex gap-2">
                   <input
                     className="flex-1 min-w-0 bg-gray-800 border border-gray-700 rounded-xl px-3.5 py-2.5 text-base sm:text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/60"
-                    placeholder="Ask the coordinator something…"
+                    placeholder="Tell the coordinator what you found…"
                     value={chatInput}
                     onChange={(e) => setChatInput(e.target.value)}
                     onKeyDown={(e) => {
@@ -475,115 +508,6 @@ export default function WorkspaceClient() {
                   </button>
                 </div>
               </div>
-            </div>
-
-            {/* Findings form */}
-            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 sm:p-5 space-y-4">
-              <div className="flex items-center justify-between flex-wrap gap-1">
-                <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-500">
-                  Findings
-                </p>
-                <p className="text-[11px] text-gray-500">{findingsCount} saved</p>
-              </div>
-              <p className="text-xs text-gray-500 -mt-2">
-                Submit at least 2 findings, each with a source URL.
-              </p>
-
-              <div className="space-y-3">
-                {rows.map((row, i) => (
-                  <div key={i} className="border border-gray-800 rounded-xl p-3.5 space-y-2.5 bg-gray-950/60">
-                    <div className="flex items-center justify-between">
-                      <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-400">
-                        <span className="h-5 w-5 rounded-full bg-gray-800 border border-gray-700 flex items-center justify-center text-[10px] text-gray-300">
-                          {i + 1}
-                        </span>
-                        Finding
-                      </span>
-                      {rows.length > 2 && (
-                        <button
-                          onClick={() => removeRow(i)}
-                          className="text-[11px] font-medium text-gray-500 hover:text-red-400 transition-colors px-2 py-1 -mr-2 min-h-11 sm:min-h-0"
-                        >
-                          Remove
-                        </button>
-                      )}
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-[11px] text-gray-500">Finding text</label>
-                      <textarea
-                        className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-base sm:text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/60 resize-none"
-                        placeholder="What did you find?"
-                        rows={2}
-                        value={row.text}
-                        onChange={(e) => updateRow(i, { text: e.target.value })}
-                      />
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-[11px] text-gray-500">Source URL</label>
-                      <input
-                        type="url"
-                        className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-base sm:text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/60"
-                        placeholder="https://…"
-                        value={row.source_url}
-                        onChange={(e) => updateRow(i, { source_url: e.target.value })}
-                      />
-                    </div>
-
-                    <div className="flex gap-2">
-                      <div className="flex-1 space-y-1">
-                        <label className="text-[11px] text-gray-500">Confidence</label>
-                        <select
-                          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-2 text-base sm:text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/60"
-                          value={row.confidence}
-                          onChange={(e) => updateRow(i, { confidence: e.target.value as Confidence })}
-                        >
-                          <option value="low">Low</option>
-                          <option value="medium">Medium</option>
-                          <option value="high">High</option>
-                        </select>
-                      </div>
-                      <div className="flex-1 space-y-1">
-                        <label className="text-[11px] text-gray-500">Type</label>
-                        <select
-                          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-2 text-base sm:text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/60"
-                          value={row.kind}
-                          onChange={(e) => updateRow(i, { kind: e.target.value as Kind })}
-                        >
-                          <option value="fact">Fact</option>
-                          <option value="interpretation">Interpretation</option>
-                          <option value="hypothesis">Hypothesis</option>
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <button
-                onClick={addRow}
-                className="w-full min-h-11 border border-dashed border-gray-700 hover:border-gray-500 hover:bg-gray-800/40 text-gray-400 hover:text-gray-200 rounded-xl text-sm font-medium transition-colors"
-              >
-                + Add another finding
-              </button>
-
-              {submitError && (
-                <p className="text-xs text-red-400 bg-red-950/40 border border-red-900 rounded-lg px-3 py-2">
-                  {submitError}
-                </p>
-              )}
-
-              <button
-                onClick={handleSubmit}
-                disabled={submitting}
-                className="w-full min-h-11 bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-500 hover:to-violet-500 disabled:opacity-50 disabled:cursor-not-allowed text-white py-3 rounded-xl text-sm font-semibold transition-all shadow-lg shadow-blue-950/50 flex items-center justify-center gap-2"
-              >
-                {submitting && (
-                  <span className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                )}
-                {submitting ? 'Submitting…' : 'Submit findings'}
-              </button>
             </div>
           </>
         )}

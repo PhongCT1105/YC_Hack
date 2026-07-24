@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
 
 const client = new Anthropic() // reads ANTHROPIC_API_KEY
-const MODEL = 'claude-haiku-4-5-20251001'
+const MODEL = 'claude-opus-5'
 
 const DecompositionSchema = z.object({
   subtasks: z.array(z.object({
@@ -42,11 +42,16 @@ export async function chatReply(ctx: ChatCtx): Promise<string> {
     max_tokens: 1024,
     output_config: { effort: 'low' },
     system:
-      `You are the coordinator agent of a live research sprint. Sprint question: "${ctx.question}". ` +
-      `You are talking to researcher "${ctx.codename}" assigned: "${ctx.subtaskTitle}" — ${ctx.subtaskBrief}. ` +
+      `You are the coordinator agent running a live, chat-first research interview. Sprint question: "${ctx.question}". ` +
+      `You are interviewing researcher "${ctx.codename}" on their assigned subtask: "${ctx.subtaskTitle}" — ${ctx.subtaskBrief}. ` +
       `Findings so far from other researchers:\n${ctx.graphSummary}\n` +
-      'Answer their questions concretely and briefly (2-4 sentences). Point them at what other researchers found when relevant. ' +
-      'They must submit at least 2 findings, each with a source URL.',
+      'There is no findings form — everything happens in this chat. Interview them like a sharp editor: ' +
+      'ask what they found AND what they personally think about it (their take, their read on it, not just facts). ' +
+      'Every time they state a claim or fact, press them for a source URL for that specific claim ("what\'s your source for that? paste the URL"). ' +
+      'Ask ONE question at a time — do not stack multiple questions in one reply. ' +
+      'When they give you a well-sourced finding or a clear opinion, briefly acknowledge it was captured before asking the next thing. ' +
+      'Point them at what other researchers found when relevant. Keep replies to 2-4 sentences, concrete and conversational. ' +
+      'They need at least 2 distinct findings, at least 2 with a source URL, and at least 1 that is their own interpretation/opinion.',
     messages: [
       ...ctx.history.map((m) => ({
         role: (m.sender === 'agent' ? 'assistant' : 'user') as 'assistant' | 'user',
@@ -57,6 +62,50 @@ export async function chatReply(ctx: ChatCtx): Promise<string> {
   })
   const block = res.content.find((b) => b.type === 'text')
   return block && block.type === 'text' ? block.text : 'Got it — keep going!'
+}
+
+export type ExtractCtx = {
+  question: string
+  subtaskTitle: string
+  subtaskBrief: string
+  transcript: { sender: 'agent' | 'worker'; content: string }[]
+}
+
+const ExtractedFindingSchema = z.object({
+  text: z.string(),
+  source_url: z.string(),
+  confidence: z.enum(['low', 'medium', 'high']),
+  kind: z.enum(['fact', 'interpretation', 'hypothesis']),
+})
+
+const ExtractFindingsSchema = z.object({
+  findings: z.array(ExtractedFindingSchema),
+})
+
+export type ExtractedFinding = z.infer<typeof ExtractedFindingSchema>
+
+export async function extractFindings(ctx: ExtractCtx): Promise<{ findings: ExtractedFinding[] }> {
+  const res = await client.messages.parse({
+    model: MODEL,
+    max_tokens: 4096,
+    output_config: { effort: 'low', format: zodOutputFormat(ExtractFindingsSchema) },
+    system:
+      `You extract structured findings from a research-interview chat transcript. ` +
+      `Sprint question: "${ctx.question}". Subtask: "${ctx.subtaskTitle}" — ${ctx.subtaskBrief}. ` +
+      'Extract ONLY claims the WORKER (not the coordinator/agent) actually made in the transcript — do not invent, ' +
+      'infer, or pad with anything they did not say. Each finding: ' +
+      '"text" = the claim in the worker\'s own words (concise); ' +
+      '"source_url" = a URL that literally appears in the transcript supporting that specific claim, or "" if none was given; ' +
+      '"kind" = "interpretation" for the worker\'s own opinions/reads/hypotheses about the topic, "hypothesis" for speculative claims, ' +
+      '"fact" for factual claims about the world; ' +
+      '"confidence" = "high" if sourced with a URL and stated plainly, "medium" if sourced loosely, "low" if unsourced or hedged. ' +
+      'If the worker made no extractable claims yet, return an empty findings array.',
+    messages: [{
+      role: 'user',
+      content: `Transcript:\n${ctx.transcript.map((m) => `${m.sender}: ${m.content}`).join('\n')}`,
+    }],
+  })
+  return res.parsed_output ?? { findings: [] }
 }
 
 export type ClassifyInput = {
