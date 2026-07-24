@@ -689,7 +689,7 @@ export default function DashboardPage({
               onSelect={selectWorker}
             />
           </div>
-        ) : view === 'graph' ? (
+        ) : view === 'graph' && selectedWorkspace ? (
           <div className="absolute inset-0 pt-14">
             <KnowledgeGraph
               pollMs={3000}

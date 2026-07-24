@@ -98,7 +98,11 @@ export async function launchDraft(id: string): Promise<LaunchResult> {
   const base = process.env.TERAC_API_BASE!.replace(/\/$/, '')
   const res = await fetch(`${base}/api/external/v2/opportunities/${id}/launch`, {
     method: 'POST',
-    headers: { authorization: `Bearer ${process.env.TERAC_API_KEY}` },
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${process.env.TERAC_API_KEY}`,
+    },
+    body: '{}',
   })
 
   if (!res.ok) {
