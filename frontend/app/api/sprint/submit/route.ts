@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { classifyEdges } from '@/lib/agent'
+import { stageAfterTaskSubmission } from '@/lib/workspaceDomain'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -13,8 +14,24 @@ export async function POST(req: Request) {
     if (!f.text || !f.source_url) return NextResponse.json({ error: 'each finding needs text and source_url' }, { status: 400 })
   }
 
-  const { data: participant } = await db.from('participants').select().eq('submission_id', submissionId).single()
-  const { data: subtask } = await db.from('subtasks').select().eq('claimed_by', submissionId).eq('status', 'claimed').limit(1).maybeSingle()
+  const { data: participant, error: participantError } = await db
+    .from('participants')
+    .select()
+    .eq('submission_id', submissionId)
+    .single()
+  if (participantError) {
+    return NextResponse.json({ error: participantError.message }, { status: 500 })
+  }
+  const { data: subtask, error: subtaskError } = await db
+    .from('subtasks')
+    .select()
+    .eq('claimed_by', submissionId)
+    .eq('status', 'claimed')
+    .limit(1)
+    .maybeSingle()
+  if (subtaskError) {
+    return NextResponse.json({ error: subtaskError.message }, { status: 500 })
+  }
   if (!participant || !subtask) return NextResponse.json({ error: 'no claimed subtask' }, { status: 400 })
 
   const rows = findings.map((f: any) => ({
@@ -25,11 +42,63 @@ export async function POST(req: Request) {
   }))
   const { data: inserted, error } = await db.from('findings').insert(rows).select()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (!inserted) {
+    return NextResponse.json({ error: 'findings were not returned' }, { status: 500 })
+  }
 
-  await db.from('subtasks').update({ status: 'submitted', updated_at: new Date().toISOString() }).eq('id', subtask.id)
-  await db.from('participants').update({ status: 'done' }).eq('submission_id', submissionId)
-  await db.from('events').insert({ sprint_id: subtask.sprint_id, type: 'FINDINGS_SUBMITTED', payload: { subtaskId: subtask.id, submissionId, count: inserted.length } })
-  await db.from('messages').insert({ submission_id: submissionId, sender: 'agent', content: `Findings received — thank you, ${participant.codename}! You're all set.` })
+  const { error: taskUpdateError } = await db
+    .from('subtasks')
+    .update({ status: 'submitted', updated_at: new Date().toISOString() })
+    .eq('id', subtask.id)
+  if (taskUpdateError) {
+    return NextResponse.json({ error: taskUpdateError.message }, { status: 500 })
+  }
+
+  const { error: participantUpdateError } = await db
+    .from('participants')
+    .update({ status: 'done' })
+    .eq('submission_id', submissionId)
+  if (participantUpdateError) {
+    return NextResponse.json({ error: participantUpdateError.message }, { status: 500 })
+  }
+
+  const { error: eventError } = await db.from('events').insert({
+    sprint_id: subtask.sprint_id,
+    type: 'FINDINGS_SUBMITTED',
+    payload: { subtaskId: subtask.id, submissionId, count: inserted.length },
+  })
+  if (eventError) {
+    return NextResponse.json({ error: eventError.message }, { status: 500 })
+  }
+
+  const { error: thankYouError } = await db.from('messages').insert({
+    submission_id: submissionId,
+    sender: 'agent',
+    content: `Findings received — thank you, ${participant.codename}! You're all set.`,
+  })
+  if (thankYouError) {
+    return NextResponse.json({ error: thankYouError.message }, { status: 500 })
+  }
+
+  const { data: workspaceTasks, error: workspaceTasksError } = await db
+    .from('subtasks')
+    .select('status')
+    .eq('sprint_id', subtask.sprint_id)
+  if (workspaceTasksError) {
+    return NextResponse.json({ error: workspaceTasksError.message }, { status: 500 })
+  }
+  const nextStage = stageAfterTaskSubmission(
+    (workspaceTasks ?? []).map((task) => task.status)
+  )
+  if (nextStage) {
+    const { error: stageError } = await db
+      .from('sprints')
+      .update({ stage: nextStage })
+      .eq('id', subtask.sprint_id)
+    if (stageError) {
+      return NextResponse.json({ error: stageError.message }, { status: 500 })
+    }
+  }
 
   // Classify edges against all other findings in the sprint (best effort — never block payout)
   try {

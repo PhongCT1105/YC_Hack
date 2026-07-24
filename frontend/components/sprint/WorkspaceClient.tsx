@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
+import { expertJoinBody } from '@/lib/expertJoin'
 
 type Participant = {
   submission_id: string
@@ -81,6 +82,7 @@ function HoldingCard({
 export default function WorkspaceClient() {
   const searchParams = useSearchParams()
   const submissionId = searchParams.get('submissionId') || searchParams.get('teracSubmissionId')
+  const workspaceId = searchParams.get('workspaceId')
 
   const [phase, setPhase] = useState<Phase>(submissionId ? 'loading' : 'no-id')
   const [joinError, setJoinError] = useState('')
@@ -133,7 +135,7 @@ export default function WorkspaceClient() {
         const res = await fetch('/api/sprint/join', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ submissionId }),
+          body: JSON.stringify(expertJoinBody(submissionId, workspaceId)),
         })
         const data = await res.json()
         if (cancelled) return
@@ -159,7 +161,7 @@ export default function WorkspaceClient() {
     return () => {
       cancelled = true
     }
-  }, [submissionId])
+  }, [submissionId, workspaceId])
 
   // Poll state every 3s once ready
   useEffect(() => {
@@ -375,6 +377,12 @@ export default function WorkspaceClient() {
         {stateError && (
           <p className="text-xs text-red-400 bg-red-950/40 border border-red-900 rounded-lg px-3 py-2">
             {stateError}
+          </p>
+        )}
+
+        {!workspaceId && (
+          <p className="text-xs text-amber-300 bg-amber-950/40 border border-amber-900 rounded-lg px-3 py-2">
+            This is a legacy Terac link. Ask the coordinator for a workspace-specific link if the assignment looks incorrect.
           </p>
         )}
 
