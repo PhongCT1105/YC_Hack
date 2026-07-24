@@ -181,8 +181,10 @@ export function WorkspaceSidebar({
 
   return (
     <aside
-      className={`fixed md:absolute left-0 top-0 md:top-16 bottom-0 w-[min(20rem,88vw)] md:w-64 z-40 bg-gray-950/98 border-r border-gray-800 flex flex-col transition-transform duration-200 ${
-        mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+      className={`fixed md:absolute left-0 top-0 md:top-16 bottom-0 w-[min(20rem,88vw)] md:w-64 z-40 bg-gray-950 border-r border-gray-800 flex flex-col transition-transform duration-200 ${
+        mobileOpen
+          ? 'visible translate-x-0'
+          : 'invisible -translate-x-full md:visible md:translate-x-0'
       }`}
     >
       <div className="flex items-center justify-between px-3 py-2.5 border-b border-gray-800">
