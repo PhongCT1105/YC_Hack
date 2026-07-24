@@ -145,7 +145,7 @@ export function WorkerPanel({
 
     // Sprint path: persist through the coordinator so the worker actually sees it.
     if (!adminKey) {
-      setSendError('read-only — append ?key=ADMIN_KEY to the dashboard URL to message workers')
+      setSendError('Read-only. Append ?key=ADMIN_KEY to the dashboard URL to message workers.')
       return
     }
     setSending(true)
@@ -160,7 +160,7 @@ export function WorkerPanel({
         setSendError(data.error ?? `send failed (${res.status})`)
         return
       }
-      // Optimistic local append — the next poll of /api/workers will reconcile.
+      // Optimistic local append. The next poll of /api/workers will reconcile.
       setLocalMessages((prev) => [
         ...prev,
         { id: `pm-${Date.now()}`, sender: 'agent', content: `[PM] ${content}`, timestamp },
@@ -178,7 +178,7 @@ export function WorkerPanel({
   return (
     <div
       className={`
-        absolute right-0 top-0 h-full w-80 bg-gray-900 border-l border-gray-800
+        absolute right-0 top-0 h-full w-full md:w-80 bg-gray-900 border-l border-gray-800
         flex flex-col z-20 shadow-2xl
         transition-transform duration-300 ease-out
         ${isOpen ? 'translate-x-0' : 'translate-x-full'}
@@ -238,7 +238,7 @@ export function WorkerPanel({
                       max-w-[90%] px-3 py-2 rounded-xl text-xs leading-relaxed
                       ${isAgent
                         ? 'bg-gray-800 text-gray-200 rounded-tl-sm'
-                        : 'bg-blue-600 text-white rounded-tr-sm'
+                        : 'bg-indigo-600 text-white rounded-tr-sm'
                       }
                     `}
                   >
@@ -257,7 +257,7 @@ export function WorkerPanel({
           <div className="p-3 border-t border-gray-800 bg-gray-950">
             <div className="flex gap-2">
               <input
-                className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 placeholder={adminKey ? 'Message worker...' : 'read-only (no admin key)'}
                 value={input}
                 disabled={!adminKey}
@@ -272,7 +272,7 @@ export function WorkerPanel({
               <button
                 onClick={() => void handleSend()}
                 disabled={!input.trim() || sending}
-                className="bg-blue-600 hover:bg-blue-500 disabled:opacity-30 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors flex-shrink-0"
+                className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-30 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors flex-shrink-0"
               >
                 {sending ? '…' : 'Send'}
               </button>

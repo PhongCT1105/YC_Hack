@@ -141,6 +141,7 @@ export default function OfficeScene({
 }) {
   return (
     <Canvas
+      dpr={[1, 1.5]}
       camera={{
         position: [10, 8, 10],
         fov: 55,

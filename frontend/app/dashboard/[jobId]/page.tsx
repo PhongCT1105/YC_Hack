@@ -1,60 +1,100 @@
 'use client'
 
 import dynamic from 'next/dynamic'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { WorkerPanel } from '@/components/WorkerPanel'
 import { STATUS_COLORS } from '@/components/three/Minion'
-import type { Worker, WorkerStatus } from '@/types'
+import {
+  WorkspaceSidebar,
+  type Workspace,
+} from '@/components/workspace/WorkspaceSidebar'
+import { PmChatPanel } from '@/components/workspace/PmChatPanel'
 import { adminHeaders } from '@/lib/workspaceClient'
+import { dashboardWorkspaceHref } from '@/lib/dashboardNavigation'
+import type { Worker, WorkerStatus } from '@/types'
 
-// R3F canvas must be client-only (no SSR)
 const OfficeScene = dynamic(() => import('@/components/three/OfficeScene'), {
   ssr: false,
   loading: () => (
-    <div className="w-full h-full flex items-center justify-center bg-gray-950">
-      <div className="text-center">
-        <div className="text-4xl mb-4 animate-bounce">🏢</div>
-        <p className="text-gray-400 text-sm">Loading office...</p>
-      </div>
+    <div className="flex h-full w-full items-center justify-center bg-gray-950">
+      <p className="text-sm text-gray-500">Loading the live office...</p>
     </div>
   ),
 })
 
-// React Flow also needs to be client-only (no SSR)
-const KnowledgeGraph = dynamic(() => import('@/components/graph/KnowledgeGraph'), {
-  ssr: false,
-  loading: () => (
-    <div className="w-full h-full flex items-center justify-center bg-gray-950">
-      <div className="text-center">
-        <div className="text-4xl mb-4 animate-bounce">🕸️</div>
-        <p className="text-gray-400 text-sm">Loading graph...</p>
+const KnowledgeGraph = dynamic(
+  () => import('@/components/graph/KnowledgeGraph'),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-full w-full items-center justify-center bg-gray-950">
+        <p className="text-sm text-gray-500">Loading the knowledge tree...</p>
       </div>
-    </div>
-  ),
-})
+    ),
+  }
+)
 
-type ViewMode = 'office' | 'graph'
+type ViewMode = 'office' | 'graph' | 'report'
 
 const STATUS_LABELS: Record<WorkerStatus, string> = {
   pending: 'Pending',
   'in-progress': 'Working',
-  review: 'In Review',
+  review: 'Review',
   done: 'Done',
   blocked: 'Blocked',
 }
 
-function ViewToggle({ view, onChange }: { view: ViewMode; onChange: (v: ViewMode) => void }) {
+const STAGE_LABELS: Record<string, string> = {
+  planning: 'Planning',
+  recruiting: 'Recruiting',
+  active: 'Active',
+  complete: 'Complete',
+}
+
+const STAGE_STYLES: Record<string, string> = {
+  planning: 'border-gray-700 bg-gray-900 text-gray-300',
+  recruiting: 'border-amber-800 bg-amber-950 text-amber-300',
+  active: 'border-emerald-800 bg-emerald-950 text-emerald-300',
+  complete: 'border-indigo-800 bg-indigo-950 text-indigo-300',
+}
+
+function StageBadge({ stage }: { stage: string }) {
   return (
-    <div className="flex items-center bg-gray-900 border border-gray-700 rounded-full p-0.5 text-xs">
-      {(['office', 'graph'] as ViewMode[]).map((v) => (
+    <span
+      className={`whitespace-nowrap rounded-full border px-2 py-1 text-[10px] font-semibold ${
+        STAGE_STYLES[stage] ?? STAGE_STYLES.planning
+      }`}
+    >
+      {STAGE_LABELS[stage] ?? stage}
+    </span>
+  )
+}
+
+function ViewToggle({
+  view,
+  onChange,
+}: {
+  view: ViewMode
+  onChange: (view: ViewMode) => void
+}) {
+  return (
+    <div className="inline-flex items-center rounded-xl border border-gray-800 bg-gray-950/95 p-1 shadow-lg">
+      {([
+        ['office', 'Office'],
+        ['graph', 'Knowledge'],
+        ['report', 'Report'],
+      ] as [ViewMode, string][]).map(([value, label]) => (
         <button
-          key={v}
-          onClick={() => onChange(v)}
-          className={`px-3 py-1 rounded-full capitalize transition-colors ${
-            view === v ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-gray-200'
+          key={value}
+          onClick={() => onChange(value)}
+          className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium transition-colors active:scale-[0.98] ${
+            view === value
+              ? 'bg-indigo-600 text-white'
+              : 'text-gray-500 hover:bg-gray-900 hover:text-gray-200'
           }`}
         >
-          {v}
+          {label}
         </button>
       ))}
     </div>
@@ -62,197 +102,322 @@ function ViewToggle({ view, onChange }: { view: ViewMode; onChange: (v: ViewMode
 }
 
 function TopBar({
-  workers,
-  jobId,
-  view,
-  onViewChange,
+  workspace,
+  adminKey,
+  onOpenWorkspaces,
+  onOpenPlanner,
   onSeed,
   seeding,
   onSynthesize,
   synthesizing,
-  actionError,
-  adminKey,
 }: {
-  workers: Worker[]
-  jobId: string
-  view: ViewMode
-  onViewChange: (v: ViewMode) => void
+  workspace: Workspace | null
+  adminKey: string | null
+  onOpenWorkspaces: () => void
+  onOpenPlanner: () => void
   onSeed: () => void
   seeding: boolean
   onSynthesize: () => void
   synthesizing: boolean
-  actionError: string | null
-  adminKey: string | null
 }) {
-  const total = workers.length
-  const done = workers.filter((w) => w.status === 'done').length
-  const blocked = workers.filter((w) => w.status === 'blocked').length
-  const pct = total > 0 ? Math.round((done / total) * 100) : 0
+  const progress = workspace?.subtasksTotal
+    ? Math.round((workspace.subtasksDone / workspace.subtasksTotal) * 100)
+    : 0
 
   return (
-    <div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between px-6 py-3 bg-gray-950/90 backdrop-blur-sm border-b border-gray-800">
-      {/* Left: job info */}
-      <div className="flex items-center gap-4">
-        <span className="text-lg font-bold text-white tracking-tight">Minion HQ</span>
-        <span className="text-xs text-gray-500 border border-gray-700 px-2 py-0.5 rounded-full">
-          {jobId}
-        </span>
-        <ViewToggle view={view} onChange={onViewChange} />
-      </div>
-
-      {/* Center: progress */}
-      <div className="flex items-center gap-3">
-        <span className="text-xs text-gray-400">
-          {done}/{total} done
-        </span>
-        <div className="w-40 bg-gray-800 rounded-full h-1.5 overflow-hidden">
-          <div
-            className="h-1.5 rounded-full bg-green-500 transition-all duration-700"
-            style={{ width: `${pct}%` }}
-          />
+    <header className="absolute inset-x-0 top-0 z-30 flex h-16 items-center border-b border-gray-800 bg-gray-950 px-3 md:px-5">
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        <button
+          onClick={onOpenWorkspaces}
+          className="rounded-lg border border-gray-800 px-2.5 py-1.5 text-xs font-medium text-gray-300 hover:bg-gray-900 md:hidden"
+        >
+          Workspaces
+        </button>
+        <div className="hidden h-8 w-8 items-center justify-center rounded-xl bg-indigo-600 text-xs font-black text-white md:flex">
+          M
         </div>
-        <span className="text-xs text-gray-400">{pct}%</span>
-        {blocked > 0 && (
-          <span className="text-xs font-semibold text-red-400 bg-red-950 px-2 py-0.5 rounded-full">
-            {blocked} blocked
-          </span>
-        )}
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium text-gray-500">Minion HQ</p>
+          <p className="truncate text-sm font-semibold text-white">
+            {workspace?.question ?? 'Research workspaces'}
+          </p>
+        </div>
+        {workspace && <StageBadge stage={workspace.stage} />}
       </div>
 
-      {/* Right: legend + actions */}
-      <div className="flex items-center gap-3">
-        {(Object.entries(STATUS_LABELS) as [WorkerStatus, string][]).map(([status, label]) => (
-          <div key={status} className="flex items-center gap-1.5">
-            <span
-              className="w-2 h-2 rounded-full"
-              style={{ backgroundColor: STATUS_COLORS[status] }}
-            />
-            <span className="text-xs text-gray-500">{label}</span>
+      {workspace && (
+        <div className="hidden items-center gap-5 px-5 lg:flex">
+          <div className="text-right">
+            <p className="text-xs font-semibold text-gray-200">
+              {workspace.subtasksDone}/{workspace.subtasksTotal}
+            </p>
+            <p className="text-[10px] text-gray-600">tasks complete</p>
           </div>
-        ))}
+          <div className="text-right">
+            <p className="text-xs font-semibold text-gray-200">
+              {workspace.workerCount}
+            </p>
+            <p className="text-[10px] text-gray-600">experts</p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs font-semibold text-gray-200">{progress}%</p>
+            <p className="text-[10px] text-gray-600">progress</p>
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center gap-2">
+        <button
+          onClick={onOpenPlanner}
+          disabled={!workspace || !adminKey}
+          className="rounded-lg border border-indigo-700 bg-indigo-950 px-3 py-2 text-xs font-semibold text-indigo-200 hover:bg-indigo-900 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Planner
+        </button>
         <button
           onClick={onSeed}
-          disabled={seeding || !adminKey}
-          title={!adminKey ? 'append ?key=ADMIN_KEY to the URL' : undefined}
-          className="text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-1 rounded-full transition-colors"
+          disabled={!workspace || !adminKey || seeding}
+          className="hidden rounded-lg border border-gray-700 px-3 py-2 text-xs font-semibold text-gray-300 hover:bg-gray-900 disabled:cursor-not-allowed disabled:opacity-40 sm:block"
         >
-          {seeding ? 'Seeding…' : '+ AI stand-in'}
+          {seeding ? 'Adding...' : 'Add AI expert'}
         </button>
         <button
           onClick={onSynthesize}
-          disabled={synthesizing || !adminKey}
-          title={!adminKey ? 'append ?key=ADMIN_KEY to the URL' : undefined}
-          className="text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-1 rounded-full transition-colors"
+          disabled={!workspace || !adminKey || synthesizing}
+          className="hidden rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40 md:block"
         >
-          {synthesizing ? 'Synthesizing…' : 'Synthesize'}
+          {synthesizing ? 'Writing...' : 'Synthesize'}
         </button>
-        {actionError && (
-          <span className="text-xs font-medium text-red-400 max-w-[240px] truncate" title={actionError}>
-            {actionError}
-          </span>
-        )}
       </div>
-    </div>
+    </header>
   )
 }
 
-function ReportModal({ report, onClose }: { report: string; onClose: () => void }) {
-  return (
-    <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/70 p-8">
-      <div className="w-full max-w-3xl max-h-full flex flex-col bg-gray-900 border border-gray-700 rounded-lg shadow-2xl">
-        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-800">
-          <span className="text-sm font-semibold text-white">Synthesis Report</span>
-          <button onClick={onClose} className="text-gray-400 hover:text-white text-sm">
-            ✕
-          </button>
-        </div>
-        <div className="overflow-y-auto px-5 py-4">
-          <pre className="whitespace-pre-wrap text-xs text-gray-200 font-sans leading-relaxed">
-            {report}
-          </pre>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function WorkerListSidebar({
+function WorkerNavigator({
   workers,
   selectedId,
   onSelect,
 }: {
   workers: Worker[]
   selectedId: string | null
-  onSelect: (w: Worker | null) => void
+  onSelect: (worker: Worker | null) => void
 }) {
   return (
-    <div className="absolute left-0 top-12 bottom-0 w-52 z-10 overflow-y-auto bg-gray-950/80 backdrop-blur-sm border-r border-gray-800 py-3">
-      <p className="text-xs font-semibold uppercase tracking-widest text-gray-600 px-4 mb-3">
-        Workers ({workers.length})
+    <aside className="absolute inset-x-0 top-14 z-10 flex h-16 gap-2 overflow-x-auto border-b border-gray-800 bg-gray-950/95 px-3 py-2 md:inset-y-0 md:right-auto md:top-0 md:h-auto md:w-56 md:flex-col md:gap-0 md:overflow-y-auto md:border-b-0 md:border-r md:px-0 md:py-3">
+      <p className="hidden px-4 pb-2 text-xs font-semibold text-gray-500 md:block">
+        Experts ({workers.length})
       </p>
-      {workers.map((w) => (
+      {workers.map((worker) => (
         <button
-          key={w.id}
-          onClick={() => onSelect(selectedId === w.id ? null : w)}
-          className={`
-            w-full text-left px-4 py-2.5 transition-colors
-            ${selectedId === w.id ? 'bg-gray-800' : 'hover:bg-gray-900'}
-          `}
+          key={worker.id}
+          onClick={() =>
+            onSelect(selectedId === worker.id ? null : worker)
+          }
+          className={`min-w-44 rounded-lg px-3 py-2 text-left transition-colors md:w-full md:min-w-0 md:rounded-none md:px-4 md:py-2.5 ${
+            selectedId === worker.id
+              ? 'bg-gray-800'
+              : 'bg-gray-900 hover:bg-gray-800 md:bg-transparent'
+          }`}
         >
-          <div className="flex items-center gap-2 mb-0.5">
+          <div className="flex items-center gap-2">
             <span
-              className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-              style={{ backgroundColor: STATUS_COLORS[w.status] }}
+              className="h-2 w-2 flex-shrink-0 rounded-full"
+              style={{ backgroundColor: STATUS_COLORS[worker.status] }}
             />
-            <span className="text-xs font-semibold text-white truncate">{w.name}</span>
+            <span className="truncate text-xs font-semibold text-white">
+              {worker.name}
+            </span>
           </div>
-          <p className="text-[11px] text-gray-500 leading-snug pl-3.5 truncate">
-            {w.subtaskTitle}
+          <p className="mt-1 truncate pl-4 text-[10px] text-gray-500">
+            {worker.subtaskTitle}
           </p>
-          <p className="text-[10px] text-gray-600 pl-3.5 mt-0.5">{w.lastUpdated}</p>
         </button>
       ))}
+    </aside>
+  )
+}
+
+function WorkspaceHoldingState({
+  workspace,
+  onOpenPlanner,
+}: {
+  workspace: Workspace
+  onOpenPlanner: () => void
+}) {
+  const copy =
+    workspace.stage === 'planning'
+      ? 'Plan the expert count, review the quote, and confirm launch with the planning agent.'
+      : 'Recruitment is live. Experts will appear here as they accept the Terac task.'
+
+  return (
+    <div className="absolute inset-0 flex items-center justify-center px-6">
+      <div className="max-w-lg text-center">
+        <p className="text-sm font-semibold text-indigo-300">
+          {workspace.stage === 'planning'
+            ? 'Ready to plan'
+            : 'Recruiting experts'}
+        </p>
+        <h2 className="mt-3 text-2xl font-semibold tracking-tight text-white">
+          Your live office is waiting
+        </h2>
+        <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-gray-400">
+          {copy}
+        </p>
+        <button
+          onClick={onOpenPlanner}
+          className="mt-6 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500 active:scale-[0.98]"
+        >
+          Open planning agent
+        </button>
+      </div>
     </div>
   )
 }
 
-export default function DashboardPage({ params }: { params: { jobId: string } }) {
+function EmptyWorkspaceState({
+  hasAdminKey,
+  onOpenWorkspaces,
+}: {
+  hasAdminKey: boolean
+  onOpenWorkspaces: () => void
+}) {
+  return (
+    <div className="absolute inset-0 flex items-center justify-center px-6">
+      <div className="max-w-lg text-center">
+        <p className="text-sm font-semibold text-indigo-300">
+          Start a research workspace
+        </p>
+        <h1 className="mt-3 text-3xl font-semibold tracking-tight text-white">
+          One question, coordinated experts
+        </h1>
+        <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-gray-400">
+          Create a question in the workspace rail. The planning agent will split
+          the work, quote recruitment, and launch after you confirm.
+        </p>
+        {!hasAdminKey && (
+          <p className="mt-4 rounded-xl border border-amber-900 bg-amber-950/50 px-4 py-3 text-xs text-amber-200">
+            Add your admin key to the dashboard URL to create and manage
+            workspaces.
+          </p>
+        )}
+        <button
+          onClick={onOpenWorkspaces}
+          className="mt-6 rounded-xl border border-gray-700 px-4 py-2.5 text-sm font-semibold text-gray-200 hover:bg-gray-900 md:hidden"
+        >
+          Open workspaces
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function ReportView({ report }: { report: string | null }) {
+  if (!report) {
+    return (
+      <div className="flex h-full items-center justify-center px-6 text-center">
+        <div>
+          <h2 className="text-xl font-semibold text-white">No report yet</h2>
+          <p className="mt-2 max-w-sm text-sm leading-6 text-gray-500">
+            Once experts submit findings, use Synthesize to turn the knowledge
+            tree into a decision-ready report.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="h-full overflow-y-auto px-5 py-20 md:px-10 lg:px-16">
+      <article className="mx-auto max-w-3xl">
+        <p className="text-xs font-semibold text-indigo-300">Synthesis report</p>
+        <pre className="mt-4 whitespace-pre-wrap font-sans text-sm leading-7 text-gray-200">
+          {report}
+        </pre>
+      </article>
+    </div>
+  )
+}
+
+export default function DashboardPage({
+  params,
+}: {
+  params: { jobId: string }
+}) {
+  const router = useRouter()
+  const [adminKey, setAdminKey] = useState<string | null>(null)
+  const [adminKeyLoaded, setAdminKeyLoaded] = useState(false)
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([])
+  const [workspacesLoaded, setWorkspacesLoaded] = useState(false)
   const [workers, setWorkers] = useState<Worker[]>([])
   const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null)
   const [view, setView] = useState<ViewMode>('office')
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
+  const [plannerOpen, setPlannerOpen] = useState(false)
   const [seeding, setSeeding] = useState(false)
   const [synthesizing, setSynthesizing] = useState(false)
-  const [report, setReport] = useState<string | null>(null)
+  const [generatedReport, setGeneratedReport] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
-  const [adminKey, setAdminKey] = useState<string | null>(null)
 
-  // Read the admin key from the URL query string on mount. Using
-  // window.location.search in an effect (rather than useSearchParams)
-  // avoids the Suspense/prerender requirement for client components.
+  const selectedWorkspace = useMemo(
+    () => workspaces.find((workspace) => workspace.id === params.jobId) ?? null,
+    [params.jobId, workspaces]
+  )
+
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    setAdminKey(params.get('key'))
+    const search = new URLSearchParams(window.location.search)
+    setAdminKey(search.get('key'))
+    setAdminKeyLoaded(true)
   }, [])
 
-  // Poll the live workers feed every 3s. Keeps the selected worker's panel
-  // in sync by re-pointing it at the fresh object with the same id.
   useEffect(() => {
-    if (!adminKey || params.jobId === 'new') return
-    let cancelled = false
+    if (!adminKey || !workspacesLoaded || selectedWorkspace) return
+    if (workspaces.length > 0) {
+      router.replace(dashboardWorkspaceHref(workspaces[0].id, adminKey))
+    }
+  }, [
+    adminKey,
+    router,
+    selectedWorkspace,
+    workspaces,
+    workspacesLoaded,
+  ])
 
+  useEffect(() => {
+    setGeneratedReport(selectedWorkspace?.report_md ?? null)
+    setSelectedWorker(null)
+    setPlannerOpen(false)
+    setView('office')
+  }, [selectedWorkspace?.id, selectedWorkspace?.report_md])
+
+  useEffect(() => {
+    if (!adminKey || !selectedWorkspace) {
+      setWorkers([])
+      return
+    }
+
+    const sprintId = selectedWorkspace.id
+    let cancelled = false
     async function poll() {
       try {
         const res = await fetch(
-          `/api/workers?sprintId=${encodeURIComponent(params.jobId)}`,
-          { headers: adminHeaders(adminKey) }
+          `/api/workers?sprintId=${encodeURIComponent(sprintId)}`,
+          {
+            cache: 'no-store',
+            headers: adminHeaders(adminKey),
+          }
         )
         if (!res.ok || cancelled) return
         const fresh: Worker[] = await res.json()
         if (cancelled) return
         setWorkers(fresh)
-        setSelectedWorker((prev) => (prev ? fresh.find((w) => w.id === prev.id) ?? prev : prev))
+        setSelectedWorker((previous) =>
+          previous
+            ? fresh.find((worker) => worker.id === previous.id) ?? previous
+            : previous
+        )
       } catch {
-        // transient network/API hiccup — next poll will retry
+        // The next poll retries transient errors.
       }
     }
 
@@ -262,14 +427,24 @@ export default function DashboardPage({ params }: { params: { jobId: string } })
       cancelled = true
       clearInterval(interval)
     }
-  }, [adminKey, params.jobId])
+  }, [adminKey, selectedWorkspace])
 
-  const handleSelect = (worker: Worker | null) => {
+  function selectWorkspace(id: string) {
+    router.push(dashboardWorkspaceHref(id, adminKey))
+  }
+
+  function openPlanner() {
+    setSelectedWorker(null)
+    setPlannerOpen(true)
+  }
+
+  function selectWorker(worker: Worker | null) {
+    setPlannerOpen(false)
     setSelectedWorker(worker)
   }
 
-  const handleSeed = async () => {
-    if (!adminKey) return
+  async function handleSeed() {
+    if (!adminKey || !selectedWorkspace) return
     setActionError(null)
     setSeeding(true)
     try {
@@ -279,19 +454,23 @@ export default function DashboardPage({ params }: { params: { jobId: string } })
           'content-type': 'application/json',
           ...adminHeaders(adminKey),
         },
-        body: JSON.stringify({ sprintId: params.jobId }),
+        body: JSON.stringify({ sprintId: selectedWorkspace.id }),
       })
       const data = await res.json().catch(() => ({}))
-      if (!res.ok) setActionError(data.error ?? `seed failed (${res.status})`)
-    } catch (e) {
-      setActionError(e instanceof Error ? e.message : 'seed failed')
+      if (!res.ok) {
+        setActionError(data.error ?? `Could not add an AI expert (${res.status})`)
+      }
+    } catch (error) {
+      setActionError(
+        error instanceof Error ? error.message : 'Could not add an AI expert'
+      )
     } finally {
       setSeeding(false)
     }
   }
 
-  const handleSynthesize = async () => {
-    if (!adminKey) return
+  async function handleSynthesize() {
+    if (!adminKey || !selectedWorkspace) return
     setActionError(null)
     setSynthesizing(true)
     try {
@@ -301,102 +480,158 @@ export default function DashboardPage({ params }: { params: { jobId: string } })
           'content-type': 'application/json',
           ...adminHeaders(adminKey),
         },
-        body: JSON.stringify({ sprintId: params.jobId }),
+        body: JSON.stringify({ sprintId: selectedWorkspace.id }),
       })
       const data = await res.json().catch(() => ({}))
-      if (!res.ok) setActionError(data.error ?? `synthesize failed (${res.status})`)
-      else if (data.report) setReport(data.report)
-    } catch (e) {
-      setActionError(e instanceof Error ? e.message : 'synthesize failed')
+      if (!res.ok) {
+        setActionError(data.error ?? `Could not synthesize (${res.status})`)
+      } else if (data.report) {
+        setGeneratedReport(data.report)
+        setView('report')
+      }
+    } catch (error) {
+      setActionError(
+        error instanceof Error ? error.message : 'Could not synthesize'
+      )
     } finally {
       setSynthesizing(false)
     }
   }
 
-  const recruiting = workers.length === 0
+  const mainOffset = sidebarCollapsed ? 'md:left-12' : 'md:left-64'
+  const officeIsWaiting =
+    selectedWorkspace && workers.length === 0 && view === 'office'
 
   return (
-    <div className="w-screen h-screen relative overflow-hidden bg-gray-950">
-      {/* Top navigation bar */}
+    <main className="relative min-h-[100dvh] overflow-hidden bg-gray-950 text-gray-200">
       <TopBar
-        workers={workers}
-        jobId={params.jobId}
-        view={view}
-        onViewChange={setView}
-        onSeed={handleSeed}
-        seeding={seeding}
-        onSynthesize={handleSynthesize}
-        synthesizing={synthesizing}
-        actionError={actionError}
+        workspace={selectedWorkspace}
         adminKey={adminKey}
+        onOpenWorkspaces={() => setMobileSidebarOpen(true)}
+        onOpenPlanner={openPlanner}
+        onSeed={() => void handleSeed()}
+        seeding={seeding}
+        onSynthesize={() => void handleSynthesize()}
+        synthesizing={synthesizing}
       />
 
-      {/* Worker list sidebar (left) — only meaningful for the office view */}
-      {!recruiting && view === 'office' && (
-        <WorkerListSidebar
-          workers={workers}
-          selectedId={selectedWorker?.id ?? null}
-          onSelect={handleSelect}
+      {mobileSidebarOpen && (
+        <button
+          aria-label="Close workspace navigation"
+          onClick={() => setMobileSidebarOpen(false)}
+          className="fixed inset-0 z-30 bg-black/70 md:hidden"
         />
       )}
 
-      {recruiting ? (
-        /* Recruiting overlay — no researchers have joined the sprint yet */
-        <div className="absolute inset-0 pt-12 flex items-center justify-center">
-          <div className="text-center">
-            <div className="text-4xl mb-4 animate-pulse">🧑‍💼</div>
-            <p className="text-gray-400 text-sm">Recruiting… no researchers have arrived yet</p>
-          </div>
-        </div>
-      ) : (
-        <>
-          {/* Main viewport — 3D Office Scene or Live Knowledge Graph, full screen behind UI */}
-          <div className={`absolute inset-0 pt-12 ${view === 'office' ? 'pl-52' : ''}`}>
-            <div
-              className="w-full h-full"
-              style={{ paddingRight: view === 'office' && selectedWorker ? '320px' : '0' }}
-            >
-              {view === 'office' ? (
-                <OfficeScene
-                  workers={workers}
-                  selectedId={selectedWorker?.id ?? null}
-                  onSelect={handleSelect}
-                />
-              ) : (
-                <KnowledgeGraph
-                  pollMs={3000}
-                  compact={false}
-                  sprintId={params.jobId}
-                  adminKey={adminKey}
-                />
-              )}
-            </div>
-          </div>
+      <WorkspaceSidebar
+        selectedId={selectedWorkspace?.id ?? null}
+        onSelect={selectWorkspace}
+        adminKey={adminKey}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed((value) => !value)}
+        onWorkspacesChange={(next) => {
+          setWorkspaces(next)
+          setWorkspacesLoaded(true)
+        }}
+        onCreated={(workspace) => {
+          setWorkspaces((current) => [
+            workspace,
+            ...current.filter((item) => item.id !== workspace.id),
+          ])
+          setPlannerOpen(true)
+        }}
+        mobileOpen={mobileSidebarOpen}
+        onCloseMobile={() => setMobileSidebarOpen(false)}
+      />
 
-          {/* Worker detail panel (right slide-in) — office view only */}
-          {view === 'office' && (
-            <div className="absolute right-0 top-0 h-full" style={{ width: '320px' }}>
-              <WorkerPanel
-                worker={selectedWorker}
-                onClose={() => setSelectedWorker(null)}
-                adminKey={adminKey ?? undefined}
+      <section
+        className={`absolute inset-x-0 bottom-0 top-16 transition-[left] duration-200 md:right-0 ${mainOffset}`}
+      >
+        {actionError && (
+          <div className="absolute inset-x-3 top-3 z-30 mx-auto max-w-xl rounded-xl border border-red-900 bg-red-950 px-4 py-2 text-center text-xs text-red-200">
+            {actionError}
+          </div>
+        )}
+
+        <div className="absolute left-1/2 top-3 z-20 -translate-x-1/2">
+          <ViewToggle view={view} onChange={setView} />
+        </div>
+
+        {adminKeyLoaded && !adminKey ? (
+          <EmptyWorkspaceState
+            hasAdminKey={false}
+            onOpenWorkspaces={() => setMobileSidebarOpen(true)}
+          />
+        ) : !selectedWorkspace ? (
+          <EmptyWorkspaceState
+            hasAdminKey={Boolean(adminKey)}
+            onOpenWorkspaces={() => setMobileSidebarOpen(true)}
+          />
+        ) : officeIsWaiting ? (
+          <WorkspaceHoldingState
+            workspace={selectedWorkspace}
+            onOpenPlanner={openPlanner}
+          />
+        ) : view === 'office' ? (
+          <>
+            <WorkerNavigator
+              workers={workers}
+              selectedId={selectedWorker?.id ?? null}
+              onSelect={selectWorker}
+            />
+            <div
+              className={`absolute inset-x-0 bottom-0 top-[7.5rem] md:inset-y-0 md:left-56 md:top-0 ${
+                plannerOpen ? 'lg:right-[380px]' : 'right-0'
+              } ${selectedWorker ? 'md:right-80' : ''}`}
+            >
+              <OfficeScene
+                workers={workers}
+                selectedId={selectedWorker?.id ?? null}
+                onSelect={selectWorker}
               />
             </div>
-          )}
+          </>
+        ) : view === 'graph' ? (
+          <div
+            className={`absolute inset-0 pt-14 ${
+              plannerOpen ? 'lg:right-[380px]' : ''
+            }`}
+          >
+            <KnowledgeGraph
+              pollMs={3000}
+              compact={false}
+              sprintId={selectedWorkspace.id}
+              adminKey={adminKey}
+            />
+          </div>
+        ) : (
+          <div
+            className={`absolute inset-0 ${
+              plannerOpen ? 'lg:right-[380px]' : ''
+            }`}
+          >
+            <ReportView report={generatedReport} />
+          </div>
+        )}
 
-          {/* Click hint — fades when a worker is selected, office view only */}
-          {view === 'office' && !selectedWorker && (
-            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
-              <p className="text-xs text-gray-600 bg-gray-950/80 px-4 py-2 rounded-full border border-gray-800">
-                Click a minion to inspect
-              </p>
-            </div>
-          )}
-        </>
-      )}
+        {selectedWorker && view === 'office' && (
+          <div className="fixed inset-0 z-50 md:absolute md:left-auto md:right-0 md:top-0 md:h-full md:w-80">
+            <WorkerPanel
+              worker={selectedWorker}
+              onClose={() => setSelectedWorker(null)}
+              adminKey={adminKey ?? undefined}
+            />
+          </div>
+        )}
 
-      {/* Synthesis report modal — overlays either view */}
-      {report && <ReportModal report={report} onClose={() => setReport(null)} />}
-    </div>
+        <PmChatPanel
+          sprintId={selectedWorkspace?.id ?? null}
+          question={selectedWorkspace?.question ?? null}
+          adminKey={adminKey}
+          open={plannerOpen}
+          onClose={() => setPlannerOpen(false)}
+        />
+      </section>
+    </main>
   )
 }

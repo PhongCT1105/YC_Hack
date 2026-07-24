@@ -1,4 +1,4 @@
-// Terac adapter — talks to the Terac recruitment API when configured, and
+// Terac adapter. Talks to the Terac recruitment API when configured and
 // falls back to an empirically-observed cost estimate when it isn't (e.g.
 // local dev without TERAC_API_BASE / TERAC_API_KEY set).
 
@@ -91,7 +91,7 @@ export async function launchDraft(id: string): Promise<LaunchResult> {
     return {
       launched: false,
       note:
-        'Terac API not connected — the PM will launch this from their Terac session; the workspace is ready for workers either way.',
+        'Terac API not connected. The PM will launch this from their Terac session; the workspace is ready for workers either way.',
     }
   }
 

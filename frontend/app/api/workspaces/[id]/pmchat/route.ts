@@ -205,7 +205,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     messages.push({ role: 'user', content: toolResults })
   }
 
-  if (!finalText) finalText = "Got it — let me know how many researchers you'd like to recruit."
+  if (!finalText) finalText = "Got it. Let me know how many researchers you'd like to recruit."
 
   const { error: replyError } = await db
     .from('pm_messages')

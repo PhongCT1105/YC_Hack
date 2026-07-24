@@ -21,7 +21,7 @@ export type Workspace = {
 
 const STAGE_STYLES: Record<WorkspaceStage, string> = {
   planning: 'bg-gray-800 text-gray-400',
-  recruiting: 'bg-amber-950 text-amber-400 animate-pulse',
+  recruiting: 'bg-amber-950 text-amber-400',
   active: 'bg-green-950 text-green-400',
   complete: 'bg-blue-950 text-blue-400',
 }
@@ -50,6 +50,9 @@ export function WorkspaceSidebar({
   collapsed,
   onToggleCollapse,
   onWorkspacesChange,
+  onCreated,
+  mobileOpen = false,
+  onCloseMobile,
 }: {
   selectedId: string | null
   onSelect: (id: string) => void
@@ -57,6 +60,9 @@ export function WorkspaceSidebar({
   collapsed: boolean
   onToggleCollapse: () => void
   onWorkspacesChange?: (workspaces: Workspace[]) => void
+  onCreated?: (workspace: Workspace) => void
+  mobileOpen?: boolean
+  onCloseMobile?: () => void
 }) {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [unavailable, setUnavailable] = useState(false)
@@ -147,6 +153,7 @@ export function WorkspaceSidebar({
         }
         setWorkspaces((prev) => [newWorkspace, ...prev])
         onSelect(sprint.id)
+        onCreated?.(newWorkspace)
       }
       setQuestion('')
       setShowCreate(false)
@@ -157,9 +164,9 @@ export function WorkspaceSidebar({
     }
   }
 
-  if (collapsed) {
+  if (collapsed && !mobileOpen) {
     return (
-      <div className="absolute left-0 top-12 bottom-0 w-12 z-20 bg-gray-950/90 backdrop-blur-sm border-r border-gray-800 flex flex-col items-center py-3 transition-[width] duration-200">
+      <div className="absolute left-0 top-16 bottom-0 w-12 z-20 bg-gray-950/95 border-r border-gray-800 hidden md:flex flex-col items-center py-3 transition-[width] duration-200">
         <button
           onClick={onToggleCollapse}
           className="text-gray-500 hover:text-white text-sm p-1.5 rounded hover:bg-gray-900"
@@ -173,12 +180,26 @@ export function WorkspaceSidebar({
   }
 
   return (
-    <div className="absolute left-0 top-12 bottom-0 w-64 z-20 bg-gray-950/90 backdrop-blur-sm border-r border-gray-800 flex flex-col transition-[width] duration-200">
+    <aside
+      className={`fixed md:absolute left-0 top-0 md:top-16 bottom-0 w-[min(20rem,88vw)] md:w-64 z-40 bg-gray-950/98 border-r border-gray-800 flex flex-col transition-transform duration-200 ${
+        mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+      }`}
+    >
       <div className="flex items-center justify-between px-3 py-2.5 border-b border-gray-800">
-        <p className="text-xs font-semibold uppercase tracking-widest text-gray-500">Workspaces</p>
+        <div>
+          <p className="text-sm font-semibold text-white">Workspaces</p>
+          <p className="text-[11px] text-gray-500">Research operations</p>
+        </div>
+        <button
+          onClick={onCloseMobile}
+          className="md:hidden text-gray-400 hover:text-white p-2 rounded-lg hover:bg-gray-900"
+          aria-label="Close workspace navigation"
+        >
+          Close
+        </button>
         <button
           onClick={onToggleCollapse}
-          className="text-gray-500 hover:text-white text-sm p-1 rounded hover:bg-gray-900"
+          className="hidden md:block text-gray-500 hover:text-white text-sm p-1 rounded hover:bg-gray-900"
           aria-label="Collapse workspace sidebar"
           title="Collapse"
         >
@@ -261,7 +282,10 @@ export function WorkspaceSidebar({
           return (
             <button
               key={w.id}
-              onClick={() => onSelect(w.id)}
+              onClick={() => {
+                onSelect(w.id)
+                onCloseMobile?.()
+              }}
               className={`w-full text-left px-4 py-2.5 transition-colors border-l-2 ${
                 isSelected
                   ? 'bg-gray-800 border-indigo-500'
@@ -282,6 +306,6 @@ export function WorkspaceSidebar({
           )
         })}
       </div>
-    </div>
+    </aside>
   )
 }

@@ -43,7 +43,7 @@ export function PmChatPanel({
         const data: PmMessage[] = await res.json()
         if (!cancelled) setMessages(data)
       } catch {
-        // transient — next poll retries
+        // Transient error. The next poll retries.
       }
     }
 
@@ -100,22 +100,24 @@ export function PmChatPanel({
   }
 
   return (
-    <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/70 p-8">
-      <div className="w-full max-w-lg h-[70vh] flex flex-col bg-gray-900 border border-gray-700 rounded-lg shadow-2xl">
+    <aside className="fixed inset-0 z-50 flex flex-col bg-gray-900 lg:absolute lg:left-auto lg:right-0 lg:top-0 lg:bottom-0 lg:w-[380px] lg:border-l lg:border-gray-800 lg:shadow-2xl">
         <div className="flex items-start justify-between px-5 py-3 border-b border-gray-800">
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-white">Planning Agent</p>
-            {question && <p className="text-xs text-gray-500 truncate max-w-md">{question}</p>}
+            <p className="text-sm font-semibold text-white">Planning agent</p>
+            {question && <p className="text-xs text-gray-500 line-clamp-2 mt-0.5">{question}</p>}
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-white text-sm flex-shrink-0 ml-2">
-            ✕
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-white text-sm flex-shrink-0 ml-2 rounded-lg px-2 py-1 hover:bg-gray-800"
+          >
+            Close
           </button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
           {messages.length === 0 && (
             <p className="text-xs text-gray-600 text-center mt-6">
-              No messages yet — ask about recruitment, cost, or progress.
+              No messages yet. Ask about recruitment, cost, or progress.
             </p>
           )}
           {messages.map((m) => {
@@ -125,7 +127,7 @@ export function PmChatPanel({
                 <div
                   className={`max-w-[85%] px-3 py-2 rounded-xl text-xs leading-relaxed whitespace-pre-wrap ${
                     isUser
-                      ? 'bg-blue-600 text-white rounded-tr-sm'
+                      ? 'bg-indigo-600 text-white rounded-tr-sm'
                       : 'bg-gray-800 text-gray-200 rounded-tl-sm'
                   }`}
                 >
@@ -147,10 +149,10 @@ export function PmChatPanel({
           <div ref={messagesEndRef} />
         </div>
 
-        <div className="p-3 border-t border-gray-800 bg-gray-950 rounded-b-lg">
+        <div className="p-3 border-t border-gray-800 bg-gray-950">
           <div className="flex gap-2">
             <input
-              className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
               placeholder={adminKey ? 'Message the planning agent...' : 'read-only (no admin key)'}
               value={input}
               disabled={!adminKey || sending}
@@ -166,7 +168,7 @@ export function PmChatPanel({
               onClick={() => void handleSend()}
               disabled={!input.trim() || sending || !adminKey}
               title={!adminKey ? 'append ?key=ADMIN_KEY to the URL' : undefined}
-              className="bg-blue-600 hover:bg-blue-500 disabled:opacity-30 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors flex-shrink-0"
+              className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-30 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors flex-shrink-0"
             >
               {sending ? '…' : 'Send'}
             </button>
@@ -177,7 +179,6 @@ export function PmChatPanel({
             </p>
           )}
         </div>
-      </div>
-    </div>
+    </aside>
   )
 }

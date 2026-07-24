@@ -270,7 +270,7 @@ export default function WorkspaceClient() {
       <HoldingCard
         emoji="⏳"
         title="Setting up your workspace"
-        message="Hang tight — connecting you to the sprint…"
+        message="Hang tight. Connecting you to the sprint…"
       />
     )
   }
@@ -298,7 +298,7 @@ export default function WorkspaceClient() {
 
   // phase === 'ready'
 
-  // Derived, presentation-only values for the progress strip — do not affect submit/validation logic above.
+  // Derived presentation values do not affect submit or validation logic.
   const validFindingsCount = rows.filter((r) => r.text.trim() && r.source_url.trim()).length
   const steps = [
     { label: 'Get assignment', done: true, current: false },
@@ -325,7 +325,7 @@ export default function WorkspaceClient() {
           </div>
 
           <h1 className="text-xl sm:text-2xl font-bold text-white leading-snug">
-            {sprint?.question ?? '—'}
+            {sprint?.question ?? '-'}
           </h1>
 
           <div className="flex items-center gap-2 flex-wrap">
@@ -396,7 +396,7 @@ export default function WorkspaceClient() {
             <p className="text-sm text-gray-400 leading-relaxed">{subtask.brief}</p>
             <div className="flex items-start gap-2 mt-3 pt-3 border-t border-gray-800/80 text-xs text-gray-500">
               <span aria-hidden>💡</span>
-              <span>Cite a source URL for every claim — the agent checks them.</span>
+              <span>Cite a source URL for every claim. The agent checks them.</span>
             </div>
           </div>
         )}
@@ -406,7 +406,7 @@ export default function WorkspaceClient() {
             <div className="mx-auto h-14 w-14 rounded-full bg-green-500/10 border border-green-700 flex items-center justify-center text-3xl">
               ✅
             </div>
-            <p className="text-lg font-semibold text-white">Findings submitted — thank you!</p>
+            <p className="text-lg font-semibold text-white">Findings submitted. Thank you!</p>
             <p className="text-sm text-gray-400 max-w-sm mx-auto leading-relaxed">
               Payment is processed by Terac automatically. You can close this tab.
             </p>
@@ -426,7 +426,7 @@ export default function WorkspaceClient() {
               </div>
               <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 max-h-80 min-h-[10rem]">
                 {messages.length === 0 && (
-                  <p className="text-xs text-gray-600 text-center py-6">No messages yet — say hello.</p>
+                  <p className="text-xs text-gray-600 text-center py-6">No messages yet. Say hello.</p>
                 )}
                 {messages.map((m) => {
                   const isAgent = m.sender === 'agent'
