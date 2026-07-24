@@ -5,11 +5,11 @@ import type { Worker, WorkerStatus } from '@/types'
 import { useMode } from '@/lib/modeContext'
 
 const STATUS_CONFIG: Record<WorkerStatus, { label: string; bg: string; text: string; dot: string }> = {
-  pending:      { label: 'Pending',    bg: 'bg-gray-800',  text: 'text-gray-400',  dot: '#9CA3AF' },
-  'in-progress':{ label: 'Working',    bg: 'bg-blue-950',  text: 'text-blue-400',  dot: '#3B82F6' },
-  review:       { label: 'In Review',  bg: 'bg-amber-950', text: 'text-amber-400', dot: '#F59E0B' },
-  done:         { label: 'Done',       bg: 'bg-green-950', text: 'text-green-400', dot: '#10B981' },
-  blocked:      { label: 'Blocked',    bg: 'bg-red-950',   text: 'text-red-400',   dot: '#EF4444' },
+  pending:      { label: 'Pending',    bg: 'bg-white/5',   text: 'text-white/40',  dot: 'rgba(255,255,255,0.25)' },
+  'in-progress':{ label: 'Working',    bg: 'bg-white/10',  text: 'text-white/80',  dot: 'rgba(255,255,255,0.7)' },
+  review:       { label: 'In Review',  bg: 'bg-white/8',   text: 'text-white/60',  dot: 'rgba(255,255,255,0.5)' },
+  done:         { label: 'Done',       bg: 'bg-white/10',  text: 'text-white',     dot: 'rgba(255,255,255,0.9)' },
+  blocked:      { label: 'Blocked',    bg: 'bg-white/5',   text: 'text-white/30',  dot: 'rgba(255,255,255,0.2)' },
 }
 
 function StatusBadge({ status }: { status: WorkerStatus }) {
@@ -83,10 +83,20 @@ export function WorkerPanel({
     setInput('')
     setChatId(initialChatId)
 
-    if (!initialChatId || !isLive) return
+    if (!isLive) return
+    if (!initialChatId && !worker?.linqPhone) return
     let cancelled = false
-    fetchThread(initialChatId)
-      .then((msgs) => { if (!cancelled) setLocalMessages(msgs.map(rawToMessage)) })
+    const url = initialChatId
+      ? `/api/linq/thread?chatId=${encodeURIComponent(initialChatId)}`
+      : `/api/linq/thread?phone=${encodeURIComponent(worker!.linqPhone!)}`
+    fetch(url)
+      .then((r) => r.json())
+      .then((data: { messages?: LinqRawMessage[]; chatId?: string | null }) => {
+        if (cancelled) return
+        const msgs = data.messages ?? []
+        if (msgs.length > 0) setLocalMessages(msgs.map(rawToMessage))
+        if (data.chatId && !initialChatId) setChatId(data.chatId)
+      })
       .catch(console.error)
     return () => { cancelled = true }
   }, [worker?.id, isLive])
@@ -241,7 +251,7 @@ export function WorkerPanel({
                         : 'text-white rounded-[18px] rounded-br-[4px]'
                       }
                     `}
-                    style={!isMe ? { background: '#0A84FF' } : undefined}
+                    style={!isMe ? { background: 'rgba(255,255,255,0.18)' } : undefined}
                   >
                     {msg.content}
                   </div>
@@ -280,7 +290,7 @@ export function WorkerPanel({
                 onClick={() => void handleSend()}
                 disabled={!input.trim() || sending}
                 className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-all disabled:opacity-25"
-                style={{ background: input.trim() && !sending ? '#0A84FF' : 'rgba(255,255,255,0.1)' }}
+                style={{ background: input.trim() && !sending ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.08)' }}
                 aria-label="Send"
               >
                 {sending
@@ -292,7 +302,7 @@ export function WorkerPanel({
               </button>
             </div>
             {sendError && (
-              <p className="text-[10px] text-red-400 mt-1.5 text-center truncate" title={sendError}>
+              <p className="text-[10px] text-white/40 mt-1.5 text-center truncate" title={sendError}>
                 ⚠ {sendError}
               </p>
             )}

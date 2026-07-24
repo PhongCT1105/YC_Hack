@@ -20,15 +20,33 @@ async function linqFetch(path: string, options?: RequestInit) {
 
 export async function GET(req: NextRequest) {
   const chatId = req.nextUrl.searchParams.get('chatId')
-  if (!chatId) return NextResponse.json({ messages: [] })
+  const phone = req.nextUrl.searchParams.get('phone')
+
+  if (!chatId && !phone) return NextResponse.json({ messages: [], chatId: null })
 
   try {
-    const data = await linqFetch(`/chats/${chatId}/messages`)
-    // API returns newest-first; reverse for chronological display
+    let resolvedChatId = chatId
+
+    if (!resolvedChatId && phone) {
+      const data = await linqFetch('/chats')
+      const chats: Record<string, unknown>[] = data.chats ?? data.items ?? data.data ?? []
+      const digits = phone.replace(/\D/g, '')
+      const found = chats.find((c) => {
+        const participants = (c.participants ?? c.members ?? []) as Record<string, unknown>[]
+        return participants.some((p) => {
+          const ph = String(p.phone ?? p.number ?? '')
+          return ph.replace(/\D/g, '').endsWith(digits)
+        })
+      })
+      if (!found) return NextResponse.json({ messages: [], chatId: null })
+      resolvedChatId = found.id as string
+    }
+
+    const data = await linqFetch(`/chats/${resolvedChatId}/messages`)
     const messages = (data.messages ?? []).slice().reverse()
-    return NextResponse.json({ messages })
+    return NextResponse.json({ messages, chatId: resolvedChatId })
   } catch (err) {
     console.error('[linq/thread]', err)
-    return NextResponse.json({ error: String(err) }, { status: 500 })
+    return NextResponse.json({ error: String(err), messages: [], chatId: null }, { status: 500 })
   }
 }
