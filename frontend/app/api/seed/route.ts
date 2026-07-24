@@ -40,6 +40,8 @@ export async function POST(req: Request) {
     messages: [{ role: 'user', content: `Subtask: ${joinRes.subtask.title}\n${joinRes.subtask.brief}` }],
   })
   const sim = res.parsed_output!
+  if (sim.findings.length < 2)
+    return NextResponse.json({ error: 'sim produced <2 findings' }, { status: 502 })
 
   // 3. Ask the coordinator one question (exercises the chat pipeline)
   await fetch(`${origin}/api/sprint/chat`, {
@@ -48,10 +50,13 @@ export async function POST(req: Request) {
   })
 
   // 4. Submit findings (sim participants get no Terac redirect)
-  await fetch(`${origin}/api/sprint/submit`, {
+  const submitRes = await fetch(`${origin}/api/sprint/submit`, {
     method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ submissionId, findings: sim.findings }),
   })
+  const submitJson = await submitRes.json()
+  if (!submitRes.ok)
+    return NextResponse.json({ error: 'sim submit failed: ' + (submitJson.error ?? submitRes.status) }, { status: 502 })
 
   return NextResponse.json({ submissionId, codename: joinRes.participant.codename })
 }

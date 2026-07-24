@@ -69,6 +69,7 @@ function TopBar({
   seeding,
   onSynthesize,
   synthesizing,
+  actionError,
 }: {
   workers: Worker[]
   jobId: string
@@ -78,6 +79,7 @@ function TopBar({
   seeding: boolean
   onSynthesize: () => void
   synthesizing: boolean
+  actionError: string | null
 }) {
   const total = workers.length
   const done = workers.filter((w) => w.status === 'done').length
@@ -139,6 +141,11 @@ function TopBar({
         >
           {synthesizing ? 'Synthesizing…' : 'Synthesize'}
         </button>
+        {actionError && (
+          <span className="text-xs font-medium text-red-400 max-w-[240px] truncate" title={actionError}>
+            {actionError}
+          </span>
+        )}
       </div>
     </div>
   )
@@ -211,6 +218,7 @@ export default function DashboardPage({ params }: { params: { jobId: string } })
   const [seeding, setSeeding] = useState(false)
   const [synthesizing, setSynthesizing] = useState(false)
   const [report, setReport] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   // Poll the live workers feed every 3s. Keeps the selected worker's panel
   // in sync by re-pointing it at the fresh object with the same id.
@@ -243,24 +251,29 @@ export default function DashboardPage({ params }: { params: { jobId: string } })
   }
 
   const handleSeed = async () => {
+    setActionError(null)
     setSeeding(true)
     try {
-      await fetch('/api/seed', { method: 'POST' })
-    } catch {
-      // best-effort — next poll will show whatever state resulted
+      const res = await fetch('/api/seed', { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) setActionError(data.error ?? `seed failed (${res.status})`)
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'seed failed')
     } finally {
       setSeeding(false)
     }
   }
 
   const handleSynthesize = async () => {
+    setActionError(null)
     setSynthesizing(true)
     try {
       const res = await fetch('/api/synthesize', { method: 'POST' })
-      const data = await res.json()
-      if (data.report) setReport(data.report)
-    } catch {
-      // best-effort
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) setActionError(data.error ?? `synthesize failed (${res.status})`)
+      else if (data.report) setReport(data.report)
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'synthesize failed')
     } finally {
       setSynthesizing(false)
     }
@@ -280,6 +293,7 @@ export default function DashboardPage({ params }: { params: { jobId: string } })
         seeding={seeding}
         onSynthesize={handleSynthesize}
         synthesizing={synthesizing}
+        actionError={actionError}
       />
 
       {/* Worker list sidebar (left) — only meaningful for the office view */}
