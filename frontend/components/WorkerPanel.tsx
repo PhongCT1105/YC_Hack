@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import type { Worker, WorkerStatus } from '@/types'
+import { useMode } from '@/lib/modeContext'
 
 const STATUS_CONFIG: Record<WorkerStatus, { label: string; bg: string; text: string; dot: string }> = {
   pending:      { label: 'Pending',     bg: 'bg-gray-800',  text: 'text-gray-400',  dot: '#9CA3AF' },
@@ -24,6 +25,39 @@ function StatusBadge({ status }: { status: WorkerStatus }) {
   )
 }
 
+interface LinqRawMessage {
+  id: string
+  sender: string
+  content: string
+  timestamp: string
+}
+
+function rawToMessage(m: LinqRawMessage) {
+  return {
+    id: m.id,
+    sender: (m.sender === 'worker' ? 'worker' : 'agent') as 'agent' | 'worker',
+    content: m.content,
+    timestamp: new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+  }
+}
+
+async function fetchThread(conversationId: string) {
+  const res = await fetch(`/api/linq/thread?conversationId=${encodeURIComponent(conversationId)}`)
+  if (!res.ok) throw new Error(`thread fetch failed: ${res.status}`)
+  const data = await res.json() as { messages: LinqRawMessage[] }
+  return data.messages ?? []
+}
+
+async function sendLinqMessage(phone: string, content: string, conversationId?: string) {
+  const res = await fetch('/api/linq/send', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone, content, conversationId }),
+  })
+  if (!res.ok) throw new Error(`send failed: ${res.status}`)
+  return await res.json() as { conversationId: string }
+}
+
 export function WorkerPanel({
   worker,
   onClose,
@@ -31,30 +65,75 @@ export function WorkerPanel({
   worker: Worker | null
   onClose: () => void
 }) {
+  const { mode } = useMode()
+  const isLive = mode === 'live'
+
   const [input, setInput] = useState('')
   const [localMessages, setLocalMessages] = useState(worker?.messages ?? [])
+  const [convId, setConvId] = useState<string | null>(worker?.linqConversationId ?? null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  // Sync messages when worker changes
+  // Sync messages / bootstrap live thread when worker changes
   useEffect(() => {
+    const initialConvId = worker?.linqConversationId ?? null
     setLocalMessages(worker?.messages ?? [])
     setInput('')
-  }, [worker?.id])
+    setConvId(initialConvId)
+
+    if (!initialConvId || !isLive) return
+
+    let cancelled = false
+
+    fetchThread(initialConvId)
+      .then((msgs) => { if (!cancelled) setLocalMessages(msgs.map(rawToMessage)) })
+      .catch(console.error)
+
+    return () => { cancelled = true }
+  }, [worker?.id, isLive])
+
+  // Poll for new messages in live mode every 5s (only if we have a conversation)
+  useEffect(() => {
+    if (!isLive || !convId) return
+    const interval = setInterval(() => {
+      fetchThread(convId)
+        .then((msgs) => setLocalMessages(msgs.map(rawToMessage)))
+        .catch(console.error)
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [isLive, convId])
 
   // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [localMessages])
 
-  function handleSend() {
+  async function handleSend() {
     if (!input.trim() || !worker) return
     const now = new Date()
     const timestamp = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`
-    setLocalMessages((prev) => [
-      ...prev,
-      { id: `pm-${Date.now()}`, sender: 'agent', content: `[PM] ${input.trim()}`, timestamp },
-    ])
+    const content = input.trim()
     setInput('')
+
+    if (isLive && worker.linqPhone) {
+      try {
+        const result = await sendLinqMessage(worker.linqPhone, content, convId ?? undefined)
+        const newConvId = result.conversationId
+        if (!convId) setConvId(newConvId)
+        const msgs = await fetchThread(newConvId)
+        setLocalMessages(msgs.map(rawToMessage))
+      } catch (e) {
+        console.error(e)
+        setLocalMessages((prev) => [
+          ...prev,
+          { id: `pm-${Date.now()}`, sender: 'agent', content: `[PM] ${content}`, timestamp },
+        ])
+      }
+    } else {
+      setLocalMessages((prev) => [
+        ...prev,
+        { id: `pm-${Date.now()}`, sender: 'agent', content: `[PM] ${content}`, timestamp },
+      ])
+    }
   }
 
   // Panel slides in/out
@@ -104,9 +183,16 @@ export function WorkerPanel({
 
           {/* Linq message thread */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
-            <p className="text-xs text-gray-600 font-semibold uppercase tracking-widest text-center mb-4">
-              Linq Thread
-            </p>
+            <div className="flex flex-col items-center mb-4 gap-1">
+              <p className="text-xs text-gray-600 font-semibold uppercase tracking-widest">
+                Linq Thread
+              </p>
+              {worker.linqPhone && (
+                <span className="text-[10px] text-gray-500 bg-gray-800 px-2 py-0.5 rounded-full font-mono">
+                  {isLive ? '🟢' : '⚫'} +{worker.linqPhone}
+                </span>
+              )}
+            </div>
             {localMessages.map((msg) => {
               const isAgent = msg.sender === 'agent'
               return (
@@ -142,12 +228,12 @@ export function WorkerPanel({
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault()
-                    handleSend()
+                    void handleSend()
                   }
                 }}
               />
               <button
-                onClick={handleSend}
+                onClick={() => void handleSend()}
                 disabled={!input.trim()}
                 className="bg-blue-600 hover:bg-blue-500 disabled:opacity-30 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors flex-shrink-0"
               >

@@ -17,4 +17,6 @@ export interface Worker {
   lastUpdated: string
   position: [number, number, number]  // desk position in 3D scene
   messages: Message[]
+  linqPhone?: string
+  linqConversationId?: string
 }
