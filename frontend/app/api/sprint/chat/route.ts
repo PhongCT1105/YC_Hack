@@ -12,7 +12,8 @@ export async function POST(req: Request) {
 
   const { data: participant } = await db.from('participants').select().eq('submission_id', submissionId).single()
   if (!participant) return NextResponse.json({ error: 'not joined' }, { status: 404 })
-  const { data: sprint } = await db.from('sprints').select().eq('id', participant.sprint_id).single()
+  const { data: sprint } = await db.from('sprints').select().eq('id', participant.sprint_id).maybeSingle()
+  if (!sprint) return NextResponse.json({ error: 'sprint not found' }, { status: 404 })
   const { data: subtask } = await db.from('subtasks').select().eq('claimed_by', submissionId)
     .order('claimed_at', { ascending: false }).limit(1).maybeSingle()
   const { data: history } = await db.from('messages').select().eq('submission_id', submissionId).order('ts').limit(30)
