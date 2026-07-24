@@ -4,15 +4,27 @@ import dynamic from 'next/dynamic'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { WorkerPanel } from '@/components/WorkerPanel'
-import { STATUS_COLORS } from '@/components/three/Minion'
 import {
   WorkspaceSidebar,
   type Workspace,
 } from '@/components/workspace/WorkspaceSidebar'
 import { PmChatPanel } from '@/components/workspace/PmChatPanel'
+import { AgentChatPanel } from '@/components/AgentChatPanel'
 import { adminHeaders } from '@/lib/workspaceClient'
 import { dashboardWorkspaceHref } from '@/lib/dashboardNavigation'
-import type { Worker, WorkerStatus } from '@/types'
+import { MOCK_WORKERS } from '@/lib/mockWorkers'
+import type { Worker } from '@/types'
+
+const MOCK_WORKSPACE: Workspace = {
+  id: 'mock-001',
+  question: 'Build a secure, scalable authentication system for a multi-tenant SaaS app',
+  stage: 'active',
+  created_at: new Date().toISOString(),
+  workerCount: 6,
+  findingsCount: 3,
+  subtasksDone: 2,
+  subtasksTotal: 6,
+}
 
 const OfficeScene = dynamic(() => import('@/components/three/OfficeScene'), {
   ssr: false,
@@ -37,39 +49,6 @@ const KnowledgeGraph = dynamic(
 
 type ViewMode = 'office' | 'graph' | 'report'
 
-const STATUS_LABELS: Record<WorkerStatus, string> = {
-  pending: 'Pending',
-  'in-progress': 'Working',
-  review: 'Review',
-  done: 'Done',
-  blocked: 'Blocked',
-}
-
-const STAGE_LABELS: Record<string, string> = {
-  planning: 'Planning',
-  recruiting: 'Recruiting',
-  active: 'Active',
-  complete: 'Complete',
-}
-
-const STAGE_STYLES: Record<string, string> = {
-  planning: 'border-gray-700 bg-gray-900 text-gray-300',
-  recruiting: 'border-amber-800 bg-amber-950 text-amber-300',
-  active: 'border-emerald-800 bg-emerald-950 text-emerald-300',
-  complete: 'border-indigo-800 bg-indigo-950 text-indigo-300',
-}
-
-function StageBadge({ stage }: { stage: string }) {
-  return (
-    <span
-      className={`whitespace-nowrap rounded-full border px-2 py-1 text-[10px] font-semibold ${
-        STAGE_STYLES[stage] ?? STAGE_STYLES.planning
-      }`}
-    >
-      {STAGE_LABELS[stage] ?? stage}
-    </span>
-  )
-}
 
 function ViewToggle({
   view,
@@ -79,7 +58,16 @@ function ViewToggle({
   onChange: (view: ViewMode) => void
 }) {
   return (
-    <div className="inline-flex items-center rounded-xl border border-gray-800 bg-gray-950/95 p-1 shadow-lg">
+    <div
+      className="inline-flex items-center p-1 shadow-lg"
+      style={{
+        background: 'rgba(8,8,16,0.6)',
+        backdropFilter: 'blur(24px)',
+        WebkitBackdropFilter: 'blur(24px)',
+        border: '1px solid rgba(255,255,255,0.08)',
+        borderRadius: 14,
+      }}
+    >
       {([
         ['office', 'Office'],
         ['graph', 'Knowledge'],
@@ -88,11 +76,11 @@ function ViewToggle({
         <button
           key={value}
           onClick={() => onChange(value)}
-          className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium transition-colors active:scale-[0.98] ${
-            view === value
-              ? 'bg-indigo-600 text-white'
-              : 'text-gray-500 hover:bg-gray-900 hover:text-gray-200'
-          }`}
+          className="whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium transition-colors active:scale-[0.98]"
+          style={{
+            background: view === value ? 'rgba(99,102,241,0.7)' : 'transparent',
+            color: view === value ? 'white' : 'rgba(255,255,255,0.4)',
+          }}
         >
           {label}
         </button>
@@ -101,141 +89,6 @@ function ViewToggle({
   )
 }
 
-function TopBar({
-  workspace,
-  adminKey,
-  onOpenWorkspaces,
-  onOpenPlanner,
-  onSeed,
-  seeding,
-  onSynthesize,
-  synthesizing,
-}: {
-  workspace: Workspace | null
-  adminKey: string | null
-  onOpenWorkspaces: () => void
-  onOpenPlanner: () => void
-  onSeed: () => void
-  seeding: boolean
-  onSynthesize: () => void
-  synthesizing: boolean
-}) {
-  const progress = workspace?.subtasksTotal
-    ? Math.round((workspace.subtasksDone / workspace.subtasksTotal) * 100)
-    : 0
-
-  return (
-    <header className="absolute inset-x-0 top-0 z-30 flex h-16 items-center border-b border-gray-800 bg-gray-950 px-3 md:px-5">
-      <div className="flex min-w-0 flex-1 items-center gap-3">
-        <button
-          onClick={onOpenWorkspaces}
-          className="rounded-lg border border-gray-800 px-2.5 py-1.5 text-xs font-medium text-gray-300 hover:bg-gray-900 md:hidden"
-        >
-          Workspaces
-        </button>
-        <div className="hidden h-8 w-8 items-center justify-center rounded-xl bg-indigo-600 text-xs font-black text-white md:flex">
-          M
-        </div>
-        <div className="min-w-0">
-          <p className="text-[11px] font-medium text-gray-500">Minion HQ</p>
-          <p className="truncate text-sm font-semibold text-white">
-            {workspace?.question ?? 'Research workspaces'}
-          </p>
-        </div>
-        {workspace && <StageBadge stage={workspace.stage} />}
-      </div>
-
-      {workspace && (
-        <div className="hidden items-center gap-5 px-5 lg:flex">
-          <div className="text-right">
-            <p className="text-xs font-semibold text-gray-200">
-              {workspace.subtasksDone}/{workspace.subtasksTotal}
-            </p>
-            <p className="text-[10px] text-gray-600">tasks complete</p>
-          </div>
-          <div className="text-right">
-            <p className="text-xs font-semibold text-gray-200">
-              {workspace.workerCount}
-            </p>
-            <p className="text-[10px] text-gray-600">experts</p>
-          </div>
-          <div className="text-right">
-            <p className="text-xs font-semibold text-gray-200">{progress}%</p>
-            <p className="text-[10px] text-gray-600">progress</p>
-          </div>
-        </div>
-      )}
-
-      <div className="flex items-center gap-2">
-        <button
-          onClick={onOpenPlanner}
-          disabled={!workspace || !adminKey}
-          className="rounded-lg border border-indigo-700 bg-indigo-950 px-3 py-2 text-xs font-semibold text-indigo-200 hover:bg-indigo-900 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          Planner
-        </button>
-        <button
-          onClick={onSeed}
-          disabled={!workspace || !adminKey || seeding}
-          className="hidden rounded-lg border border-gray-700 px-3 py-2 text-xs font-semibold text-gray-300 hover:bg-gray-900 disabled:cursor-not-allowed disabled:opacity-40 sm:block"
-        >
-          {seeding ? 'Adding...' : 'Add AI expert'}
-        </button>
-        <button
-          onClick={onSynthesize}
-          disabled={!workspace || !adminKey || synthesizing}
-          className="hidden rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40 md:block"
-        >
-          {synthesizing ? 'Writing...' : 'Synthesize'}
-        </button>
-      </div>
-    </header>
-  )
-}
-
-function WorkerNavigator({
-  workers,
-  selectedId,
-  onSelect,
-}: {
-  workers: Worker[]
-  selectedId: string | null
-  onSelect: (worker: Worker | null) => void
-}) {
-  return (
-    <aside className="absolute inset-x-0 top-14 z-10 flex h-16 gap-2 overflow-x-auto border-b border-gray-800 bg-gray-950/95 px-3 py-2 md:inset-y-0 md:right-auto md:top-0 md:h-auto md:w-56 md:flex-col md:gap-0 md:overflow-y-auto md:border-b-0 md:border-r md:px-0 md:py-3">
-      <p className="hidden px-4 pb-2 text-xs font-semibold text-gray-500 md:block">
-        Experts ({workers.length})
-      </p>
-      {workers.map((worker) => (
-        <button
-          key={worker.id}
-          onClick={() =>
-            onSelect(selectedId === worker.id ? null : worker)
-          }
-          className={`min-w-44 rounded-lg px-3 py-2 text-left transition-colors md:w-full md:min-w-0 md:rounded-none md:px-4 md:py-2.5 ${
-            selectedId === worker.id
-              ? 'bg-gray-800'
-              : 'bg-gray-900 hover:bg-gray-800 md:bg-transparent'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <span
-              className="h-2 w-2 flex-shrink-0 rounded-full"
-              style={{ backgroundColor: STATUS_COLORS[worker.status] }}
-            />
-            <span className="truncate text-xs font-semibold text-white">
-              {worker.name}
-            </span>
-          </div>
-          <p className="mt-1 truncate pl-4 text-[10px] text-gray-500">
-            {worker.subtaskTitle}
-          </p>
-        </button>
-      ))}
-    </aside>
-  )
-}
 
 function WorkspaceHoldingState({
   workspace,
@@ -354,15 +207,17 @@ export default function DashboardPage({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [plannerOpen, setPlannerOpen] = useState(false)
+  const [agentChatOpen, setAgentChatOpen] = useState(false)
+  const [useMock, setUseMock] = useState(false)
   const [seeding, setSeeding] = useState(false)
   const [synthesizing, setSynthesizing] = useState(false)
   const [generatedReport, setGeneratedReport] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
 
-  const selectedWorkspace = useMemo(
-    () => workspaces.find((workspace) => workspace.id === params.jobId) ?? null,
-    [params.jobId, workspaces]
-  )
+  const selectedWorkspace = useMemo(() => {
+    if (useMock) return MOCK_WORKSPACE
+    return workspaces.find((workspace) => workspace.id === params.jobId) ?? null
+  }, [useMock, params.jobId, workspaces])
 
   useEffect(() => {
     const search = new URLSearchParams(window.location.search)
@@ -391,6 +246,11 @@ export default function DashboardPage({
   }, [selectedWorkspace?.id, selectedWorkspace?.report_md])
 
   useEffect(() => {
+    if (useMock) {
+      setWorkers(MOCK_WORKERS)
+      return
+    }
+
     if (!adminKey || !selectedWorkspace) {
       setWorkers([])
       return
@@ -427,7 +287,7 @@ export default function DashboardPage({
       cancelled = true
       clearInterval(interval)
     }
-  }, [adminKey, selectedWorkspace])
+  }, [useMock, adminKey, selectedWorkspace])
 
   function selectWorkspace(id: string) {
     router.push(dashboardWorkspaceHref(id, adminKey))
@@ -498,23 +358,12 @@ export default function DashboardPage({
     }
   }
 
-  const mainOffset = sidebarCollapsed ? 'md:left-12' : 'md:left-64'
   const officeIsWaiting =
     selectedWorkspace && workers.length === 0 && view === 'office'
 
   return (
     <main className="relative min-h-[100dvh] overflow-hidden bg-gray-950 text-gray-200">
-      <TopBar
-        workspace={selectedWorkspace}
-        adminKey={adminKey}
-        onOpenWorkspaces={() => setMobileSidebarOpen(true)}
-        onOpenPlanner={openPlanner}
-        onSeed={() => void handleSeed()}
-        seeding={seeding}
-        onSynthesize={() => void handleSynthesize()}
-        synthesizing={synthesizing}
-      />
-
+      {/* Mobile sidebar backdrop */}
       {mobileSidebarOpen && (
         <button
           aria-label="Close workspace navigation"
@@ -523,6 +372,7 @@ export default function DashboardPage({
         />
       )}
 
+      {/* Glass workspace rail — floats over the canvas */}
       <WorkspaceSidebar
         selectedId={selectedWorkspace?.id ?? null}
         onSelect={selectWorkspace}
@@ -544,25 +394,96 @@ export default function DashboardPage({
         onCloseMobile={() => setMobileSidebarOpen(false)}
       />
 
-      <section
-        className={`absolute inset-x-0 bottom-0 top-16 transition-[left] duration-200 md:right-0 ${mainOffset}`}
-      >
+      {/* Full-screen canvas section */}
+      <section className="absolute inset-0">
+        {/* Error toast */}
         {actionError && (
           <div className="absolute inset-x-3 top-3 z-30 mx-auto max-w-xl rounded-xl border border-red-900 bg-red-950 px-4 py-2 text-center text-xs text-red-200">
             {actionError}
           </div>
         )}
 
+        {/* Mobile: open workspaces button */}
+        <button
+          onClick={() => setMobileSidebarOpen(true)}
+          className="absolute left-3 top-3 z-20 flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-white md:hidden"
+          style={{
+            background: 'rgba(8,8,16,0.6)',
+            backdropFilter: 'blur(24px)',
+            WebkitBackdropFilter: 'blur(24px)',
+            border: '1px solid rgba(255,255,255,0.08)',
+          }}
+        >
+          ☰ Workspaces
+        </button>
+
+        {/* Floating view toggle — top center */}
         <div className="absolute left-1/2 top-3 z-20 -translate-x-1/2">
           <ViewToggle view={view} onChange={setView} />
         </div>
 
-        {adminKeyLoaded && !adminKey ? (
+        {/* Floating action bar — top right */}
+        <div
+          className="absolute right-3 top-3 z-20 flex items-center gap-1.5"
+          style={{
+            background: 'rgba(8,8,16,0.6)',
+            backdropFilter: 'blur(24px)',
+            WebkitBackdropFilter: 'blur(24px)',
+            border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: 16,
+            padding: '6px 8px',
+          }}
+        >
+          <button
+            onClick={() => { setPlannerOpen(false); setAgentChatOpen((v) => !v) }}
+            title="Message the orchestrator agent"
+            className="flex h-7 w-7 items-center justify-center rounded-xl text-base transition-colors"
+            style={{ background: agentChatOpen ? 'rgba(99,102,241,0.3)' : 'rgba(255,255,255,0.06)' }}
+          >
+            🤖
+          </button>
+          <button
+            onClick={openPlanner}
+            disabled={!selectedWorkspace || !adminKey}
+            className="rounded-xl px-2.5 py-1 text-xs font-semibold text-indigo-200 transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+            style={{
+              background: plannerOpen ? 'rgba(99,102,241,0.3)' : 'rgba(99,102,241,0.15)',
+              border: '1px solid rgba(99,102,241,0.25)',
+            }}
+          >
+            Planner
+          </button>
+          <button
+            onClick={() => void handleSeed()}
+            disabled={!selectedWorkspace || !adminKey || seeding}
+            className="hidden rounded-xl px-2.5 py-1 text-xs font-semibold text-gray-300 transition-colors disabled:cursor-not-allowed disabled:opacity-40 sm:block"
+            style={{
+              background: 'rgba(255,255,255,0.07)',
+              border: '1px solid rgba(255,255,255,0.08)',
+            }}
+          >
+            {seeding ? 'Adding...' : 'Add AI expert'}
+          </button>
+          <button
+            onClick={() => void handleSynthesize()}
+            disabled={!selectedWorkspace || !adminKey || synthesizing}
+            className="hidden rounded-xl px-2.5 py-1 text-xs font-semibold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40 md:block"
+            style={{
+              background: 'rgba(99,102,241,0.6)',
+              border: '1px solid rgba(99,102,241,0.3)',
+            }}
+          >
+            {synthesizing ? 'Writing...' : 'Synthesize'}
+          </button>
+        </div>
+
+        {/* Main content */}
+        {!useMock && adminKeyLoaded && !adminKey ? (
           <EmptyWorkspaceState
             hasAdminKey={false}
             onOpenWorkspaces={() => setMobileSidebarOpen(true)}
           />
-        ) : !selectedWorkspace ? (
+        ) : !useMock && !selectedWorkspace ? (
           <EmptyWorkspaceState
             hasAdminKey={Boolean(adminKey)}
             onOpenWorkspaces={() => setMobileSidebarOpen(true)}
@@ -573,30 +494,15 @@ export default function DashboardPage({
             onOpenPlanner={openPlanner}
           />
         ) : view === 'office' ? (
-          <>
-            <WorkerNavigator
+          <div className="absolute inset-0">
+            <OfficeScene
               workers={workers}
               selectedId={selectedWorker?.id ?? null}
               onSelect={selectWorker}
             />
-            <div
-              className={`absolute inset-x-0 bottom-0 top-[7.5rem] md:inset-y-0 md:left-56 md:top-0 ${
-                plannerOpen ? 'lg:right-[380px]' : 'right-0'
-              } ${selectedWorker ? 'md:right-80' : ''}`}
-            >
-              <OfficeScene
-                workers={workers}
-                selectedId={selectedWorker?.id ?? null}
-                onSelect={selectWorker}
-              />
-            </div>
-          </>
+          </div>
         ) : view === 'graph' ? (
-          <div
-            className={`absolute inset-0 pt-14 ${
-              plannerOpen ? 'lg:right-[380px]' : ''
-            }`}
-          >
+          <div className="absolute inset-0 pt-14">
             <KnowledgeGraph
               pollMs={3000}
               compact={false}
@@ -605,17 +511,14 @@ export default function DashboardPage({
             />
           </div>
         ) : (
-          <div
-            className={`absolute inset-0 ${
-              plannerOpen ? 'lg:right-[380px]' : ''
-            }`}
-          >
+          <div className="absolute inset-0">
             <ReportView report={generatedReport} />
           </div>
         )}
 
+        {/* Floating glass panels — right side */}
         {selectedWorker && view === 'office' && (
-          <div className="fixed inset-0 z-50 md:absolute md:left-auto md:right-0 md:top-0 md:h-full md:w-80">
+          <div className="fixed inset-0 z-50 md:absolute md:inset-auto md:bottom-0 md:right-0 md:top-0 md:w-80">
             <WorkerPanel
               worker={selectedWorker}
               onClose={() => setSelectedWorker(null)}
@@ -631,6 +534,32 @@ export default function DashboardPage({
           open={plannerOpen}
           onClose={() => setPlannerOpen(false)}
         />
+
+        <AgentChatPanel
+          open={agentChatOpen}
+          onClose={() => setAgentChatOpen(false)}
+          sprintId={selectedWorkspace?.id ?? null}
+          adminKey={adminKey}
+        />
+
+        {/* Mock mode toggle — bottom right */}
+        <button
+          onClick={() => setUseMock((v) => !v)}
+          className="absolute bottom-4 right-4 z-30 flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold transition-all"
+          style={{
+            background: useMock ? 'rgba(99,102,241,0.25)' : 'rgba(8,8,16,0.55)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            border: useMock ? '1px solid rgba(99,102,241,0.5)' : '1px solid rgba(255,255,255,0.08)',
+            color: useMock ? 'rgba(165,180,252,1)' : 'rgba(255,255,255,0.3)',
+          }}
+        >
+          <span
+            className="h-1.5 w-1.5 rounded-full"
+            style={{ background: useMock ? '#818CF8' : 'rgba(255,255,255,0.2)' }}
+          />
+          {useMock ? 'Mock on' : 'Mock'}
+        </button>
       </section>
     </main>
   )

@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
 
 const client = new Anthropic() // reads ANTHROPIC_API_KEY
-const MODEL = 'claude-opus-4-6'
+const MODEL = 'claude-haiku-4-5-20251001'
 
 const DecompositionSchema = z.object({
   subtasks: z.array(z.object({
