@@ -25,13 +25,17 @@ export async function decomposeQuestion(question: string): Promise<{ title: stri
     model: MODEL,
     max_tokens: 16000,
     system:
-      'You decompose a research question into exactly 6 independent subtasks for non-expert web researchers. ' +
+      'You decompose a research question into independent subtasks for non-expert web researchers. ' +
+      'YOU decide how many subtasks the question actually needs (2 to 8): follow the natural structure ' +
+      'of the question — one per entity to compare, one per distinct angle (evidence for, evidence against, ' +
+      'background, expert opinion, ...). Never pad with filler subtasks to reach a count, and never cram two ' +
+      'distinct investigations into one. A narrow factual question may need only 2-3; a broad comparison may need 7-8. ' +
       'Each subtask: ~15 minutes of careful web research, no special expertise, no dependency on other subtasks. ' +
       'brief = 3-5 sentences of concrete instructions including what evidence to collect (URLs required).',
     messages: [{ role: 'user', content: `Research question: ${question}` }],
     output_config: { format: zodOutputFormat(DecompositionSchema) },
   })
-  return res.parsed_output!.subtasks.slice(0, 6)
+  return res.parsed_output!.subtasks.slice(0, 8)
 }
 
 export type ChatCtx = {
