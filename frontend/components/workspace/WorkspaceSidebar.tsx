@@ -20,10 +20,10 @@ export type Workspace = {
 }
 
 const STAGE_STYLES: Record<WorkspaceStage, string> = {
-  planning: 'bg-gray-800 text-gray-400',
-  recruiting: 'bg-amber-950 text-amber-400',
-  active: 'bg-green-950 text-green-400',
-  complete: 'bg-blue-950 text-blue-400',
+  planning:   'text-white/40',
+  recruiting: 'text-white/60',
+  active:     'text-white/80',
+  complete:   'text-white',
 }
 
 const STAGE_LABELS: Record<WorkspaceStage, string> = {
@@ -37,7 +37,7 @@ function StageBadge({ stage }: { stage: WorkspaceStage }) {
   const style = STAGE_STYLES[stage] ?? STAGE_STYLES.planning
   const label = STAGE_LABELS[stage] ?? stage
   return (
-    <span className={`inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-full ${style}`}>
+    <span className={`inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-full bg-white/8 ${style}`}>
       {label}
     </span>
   )
@@ -243,7 +243,7 @@ export function WorkspaceSidebar({
             disabled={!adminKey}
             title={!adminKey ? 'append ?key=ADMIN_KEY to the URL' : undefined}
             className="w-full text-xs font-semibold text-white disabled:opacity-50 disabled:cursor-not-allowed px-3 py-2 rounded-lg transition-colors"
-            style={{ background: 'rgba(99,102,241,0.7)', border: '1px solid rgba(99,102,241,0.4)' }}
+            style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.12)' }}
           >
             + New question
           </button>
@@ -270,7 +270,7 @@ export function WorkspaceSidebar({
                   onClick={handleCreate}
                   disabled={!question.trim() || !adminKey}
                   className="flex-1 text-xs font-semibold text-white disabled:opacity-50 disabled:cursor-not-allowed px-3 py-1.5 rounded-lg transition-colors"
-                    style={{ background: 'rgba(99,102,241,0.7)', border: '1px solid rgba(99,102,241,0.4)' }}
+                    style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.12)' }}
                 >
                   Create
                 </button>
@@ -287,7 +287,7 @@ export function WorkspaceSidebar({
               </div>
             )}
             {createError && (
-              <p className="text-[10px] text-red-400 truncate" title={createError}>
+              <p className="text-[10px] text-white/40 truncate" title={createError}>
                 {createError}
               </p>
             )}
@@ -320,7 +320,7 @@ export function WorkspaceSidebar({
               }}
               className="w-full text-left px-4 py-2.5 transition-colors border-l-2"
               style={{
-                borderLeftColor: isSelected ? '#6366F1' : 'transparent',
+                borderLeftColor: isSelected ? 'rgba(255,255,255,0.5)' : 'transparent',
                 background: isSelected ? 'rgba(255,255,255,0.08)' : undefined,
               }}
               onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}

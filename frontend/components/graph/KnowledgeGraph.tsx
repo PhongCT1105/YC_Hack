@@ -91,15 +91,15 @@ function computeLayout(nodes: ApiNode[], edges: ApiEdge[]) {
 // ---------- Node rendering ----------
 
 const SUBTASK_GLOW: Record<string, { border: string; glow: string; bg: string; label: string }> = {
-  open:      { border: 'rgba(107,114,128,0.85)', glow: 'rgba(107,114,128,0.4)',  bg: 'rgba(17,24,39,0.95)',  label: '#9ca3af' },
-  claimed:   { border: 'rgba(245,158,11,0.85)',  glow: 'rgba(245,158,11,0.35)', bg: 'rgba(41,26,4,0.95)',   label: '#fbbf24' },
-  submitted: { border: 'rgba(34,197,94,0.85)',   glow: 'rgba(34,197,94,0.35)',  bg: 'rgba(2,30,12,0.95)',   label: '#4ade80' },
+  open:      { border: 'rgba(255,255,255,0.3)',  glow: 'rgba(255,255,255,0.08)', bg: 'rgba(17,24,39,0.95)', label: 'rgba(255,255,255,0.35)' },
+  claimed:   { border: 'rgba(255,255,255,0.6)',  glow: 'rgba(255,255,255,0.2)',  bg: 'rgba(20,20,28,0.95)', label: 'rgba(255,255,255,0.65)' },
+  submitted: { border: 'rgba(255,255,255,0.9)',  glow: 'rgba(255,255,255,0.35)', bg: 'rgba(22,22,30,0.95)', label: 'rgba(255,255,255,0.9)' },
 }
 
 const FINDING_GLOW: Record<string, { border: string; glow: string }> = {
-  high:   { border: 'rgba(74,222,128,0.85)',  glow: 'rgba(74,222,128,0.35)' },
-  medium: { border: 'rgba(251,191,36,0.85)',  glow: 'rgba(251,191,36,0.35)' },
-  low:    { border: 'rgba(248,113,113,0.85)', glow: 'rgba(248,113,113,0.35)' },
+  high:   { border: 'rgba(255,255,255,0.8)',  glow: 'rgba(255,255,255,0.28)' },
+  medium: { border: 'rgba(255,255,255,0.5)',  glow: 'rgba(255,255,255,0.14)' },
+  low:    { border: 'rgba(255,255,255,0.25)', glow: 'rgba(255,255,255,0.07)' },
 }
 
 const GLOW_ANIM: React.CSSProperties = {
@@ -115,16 +115,16 @@ function QuestionNode({ data }: NodeProps<{ label: string; compact?: boolean }>)
         style={{
           width: size, height: size,
           borderRadius: '50%',
-          background: 'radial-gradient(circle at 35% 30%, rgba(129,140,248,0.22), rgba(8,8,20,0.96))',
-          border: '2px solid rgba(129,140,248,0.9)',
-          boxShadow: '0 0 20px rgba(99,102,241,0.65), 0 0 44px rgba(99,102,241,0.22)',
+          background: 'radial-gradient(circle at 35% 30%, rgba(255,255,255,0.1), rgba(8,8,20,0.96))',
+          border: '2px solid rgba(255,255,255,0.85)',
+          boxShadow: '0 0 20px rgba(255,255,255,0.35), 0 0 44px rgba(255,255,255,0.1)',
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
           textAlign: 'center', padding: data.compact ? 10 : 16,
           ...GLOW_ANIM,
           animationDelay: '0s',
         }}
       >
-        <div style={{ fontSize: 7, color: 'rgba(165,180,252,0.7)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>
+        <div style={{ fontSize: 7, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>
           Question
         </div>
         <div style={{
@@ -243,16 +243,16 @@ const nodeTypes: NodeTypes = {
 function edgeStyleFor(relation: string) {
   switch (relation) {
     case 'builds_on':
-      return { stroke: '#3b82f6', strokeWidth: 2, dashed: false, animated: false }
+      return { stroke: 'rgba(255,255,255,0.5)', strokeWidth: 2, dashed: false, animated: false }
     case 'references':
-      return { stroke: '#64748b', strokeWidth: 2, dashed: false, animated: false }
+      return { stroke: 'rgba(255,255,255,0.3)', strokeWidth: 2, dashed: false, animated: false }
     case 'supports':
-      return { stroke: '#22c55e', strokeWidth: 2, dashed: false, animated: false }
+      return { stroke: 'rgba(255,255,255,0.6)', strokeWidth: 2, dashed: false, animated: false }
     case 'contradicts':
-      return { stroke: '#ef4444', strokeWidth: 3, dashed: true, animated: true }
+      return { stroke: 'rgba(255,255,255,0.7)', strokeWidth: 3, dashed: true, animated: true }
     case 'structure':
     default:
-      return { stroke: '#4b5563', strokeWidth: 1, dashed: false, animated: false }
+      return { stroke: 'rgba(255,255,255,0.15)', strokeWidth: 1, dashed: false, animated: false }
   }
 }
 
@@ -300,12 +300,8 @@ function RelationEdge({
           className="nodrag nopan"
         >
           <div
-            className={`rounded px-1.5 py-0.5 text-[9px] font-semibold shadow ${
-              relation === 'contradicts'
-                ? 'bg-red-950/90 text-red-300 border border-red-500'
-                : 'bg-gray-900/90 border'
-            }`}
-            style={relation !== 'contradicts' ? { borderColor: style?.stroke as string, color: style?.stroke as string } : undefined}
+            className="rounded px-1.5 py-0.5 text-[9px] font-semibold shadow bg-black/80 border"
+            style={{ borderColor: style?.stroke as string, color: style?.stroke as string }}
           >
             {label}
             {showRationale && (

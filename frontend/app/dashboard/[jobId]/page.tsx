@@ -24,7 +24,7 @@ type LinqMessage = {
   sentAt?: string
 }
 
-const FROM_DIGITS = '12055030476'
+const FROM_DIGITS = '16473271398'
 
 const MOCK_WORKSPACE: Workspace = {
   id: 'mock-001',
@@ -126,7 +126,7 @@ function ViewToggle({
           onClick={() => onChange(value)}
           className="whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium transition-colors active:scale-[0.98]"
           style={{
-            background: view === value ? 'rgba(99,102,241,0.7)' : 'transparent',
+            background: view === value ? 'rgba(255,255,255,0.12)' : 'transparent',
             color: view === value ? 'white' : 'rgba(255,255,255,0.4)',
           }}
         >
@@ -153,7 +153,7 @@ function WorkspaceHoldingState({
   return (
     <div className="absolute inset-0 flex items-center justify-center px-6">
       <div className="max-w-lg text-center">
-        <p className="text-sm font-semibold text-indigo-300">
+        <p className="text-sm font-semibold text-white/60">
           {workspace.stage === 'planning'
             ? 'Ready to plan'
             : 'Recruiting experts'}
@@ -166,7 +166,8 @@ function WorkspaceHoldingState({
         </p>
         <button
           onClick={onOpenPlanner}
-          className="mt-6 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500 active:scale-[0.98]"
+          className="mt-6 rounded-xl px-4 py-2.5 text-sm font-semibold text-white active:scale-[0.98]"
+          style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.12)' }}
         >
           Open planning agent
         </button>
@@ -185,7 +186,7 @@ function EmptyWorkspaceState({
   return (
     <div className="absolute inset-0 flex items-center justify-center px-6">
       <div className="max-w-lg text-center">
-        <p className="text-sm font-semibold text-indigo-300">
+        <p className="text-sm font-semibold text-white/60">
           Start a research workspace
         </p>
         <h1 className="mt-3 text-3xl font-semibold tracking-tight text-white">
@@ -196,7 +197,7 @@ function EmptyWorkspaceState({
           the work, quote recruitment, and launch after you confirm.
         </p>
         {!hasAdminKey && (
-          <p className="mt-4 rounded-xl border border-amber-900 bg-amber-950/50 px-4 py-3 text-xs text-amber-200">
+          <p className="mt-4 rounded-xl px-4 py-3 text-xs text-white/60" style={{ border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)' }}>
             Add your admin key to the dashboard URL to create and manage
             workspaces.
           </p>
@@ -232,7 +233,7 @@ function ReportView({ report }: { report: string | null }) {
   return (
     <div className="h-full overflow-y-auto px-5 py-16 md:px-10 lg:px-16">
       <article className="mx-auto max-w-3xl">
-        <p className="mb-6 text-xs font-semibold text-indigo-300">Synthesis report</p>
+        <p className="mb-6 text-xs font-semibold text-white/40">Synthesis report</p>
         <div
           className="prose-report"
           dangerouslySetInnerHTML={{ __html: html }}
@@ -541,17 +542,17 @@ export default function DashboardPage({
               onClick={() => { setPlannerOpen(false); setAgentChatOpen((v) => !v) }}
               title="Message the orchestrator agent"
               className="flex h-7 w-7 items-center justify-center rounded-xl text-base transition-colors"
-              style={{ background: agentChatOpen ? 'rgba(99,102,241,0.3)' : 'rgba(255,255,255,0.06)' }}
+              style={{ background: agentChatOpen ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.06)' }}
             >
               🤖
             </button>
             <button
               onClick={openPlanner}
               disabled={!selectedWorkspace || !adminKey}
-              className="rounded-xl px-2.5 py-1 text-xs font-semibold text-indigo-200 transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+              className="rounded-xl px-2.5 py-1 text-xs font-semibold text-white/70 transition-colors disabled:cursor-not-allowed disabled:opacity-40"
               style={{
-                background: plannerOpen ? 'rgba(99,102,241,0.3)' : 'rgba(99,102,241,0.15)',
-                border: '1px solid rgba(99,102,241,0.25)',
+                background: plannerOpen ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.07)',
+                border: '1px solid rgba(255,255,255,0.1)',
               }}
             >
               Planner
@@ -572,8 +573,8 @@ export default function DashboardPage({
               disabled={!selectedWorkspace || !adminKey || synthesizing}
               className="hidden rounded-xl px-2.5 py-1 text-xs font-semibold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40 md:block"
               style={{
-                background: 'rgba(99,102,241,0.6)',
-                border: '1px solid rgba(99,102,241,0.3)',
+                background: 'rgba(255,255,255,0.12)',
+                border: '1px solid rgba(255,255,255,0.12)',
               }}
             >
               {synthesizing ? 'Writing...' : 'Synthesize'}
@@ -619,7 +620,7 @@ export default function DashboardPage({
                     <div
                       className="max-w-[82%] px-3 py-2 text-xs leading-relaxed"
                       style={{
-                        background: isUs ? '#0A84FF' : 'rgba(58,58,62,0.9)',
+                        background: isUs ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.07)',
                         color: 'white',
                         borderRadius: isUs ? '14px 14px 3px 14px' : '14px 14px 14px 3px',
                       }}
@@ -655,7 +656,7 @@ export default function DashboardPage({
                 onClick={() => void handleManagerSend()}
                 disabled={!managerInput.trim() || managerSending}
                 className="flex h-7 w-7 items-center justify-center rounded-full flex-shrink-0 transition-all disabled:opacity-25"
-                style={{ background: managerInput.trim() && !managerSending ? '#6366F1' : 'rgba(255,255,255,0.1)' }}
+                style={{ background: managerInput.trim() && !managerSending ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.08)' }}
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 19V5M5 12l7-7 7 7"/>
@@ -728,16 +729,16 @@ export default function DashboardPage({
           onClick={() => setUseMock((v) => !v)}
           className="absolute bottom-4 right-4 z-30 flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold transition-all"
           style={{
-            background: useMock ? 'rgba(99,102,241,0.25)' : 'rgba(8,8,16,0.55)',
+            background: useMock ? 'rgba(255,255,255,0.1)' : 'rgba(8,8,16,0.55)',
             backdropFilter: 'blur(20px)',
             WebkitBackdropFilter: 'blur(20px)',
-            border: useMock ? '1px solid rgba(99,102,241,0.5)' : '1px solid rgba(255,255,255,0.08)',
-            color: useMock ? 'rgba(165,180,252,1)' : 'rgba(255,255,255,0.3)',
+            border: useMock ? '1px solid rgba(255,255,255,0.25)' : '1px solid rgba(255,255,255,0.08)',
+            color: useMock ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.3)',
           }}
         >
           <span
             className="h-1.5 w-1.5 rounded-full"
-            style={{ background: useMock ? '#818CF8' : 'rgba(255,255,255,0.2)' }}
+            style={{ background: useMock ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.2)' }}
           />
           {useMock ? 'Mock on' : 'Mock'}
         </button>

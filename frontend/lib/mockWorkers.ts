@@ -8,6 +8,7 @@ export const MOCK_WORKERS: Worker[] = [
     id: 'w-1',
     name: 'Alex K.',
     teracId: 'TRC-0012',
+    linqPhone: '7747013932',
     subtaskTitle: 'Build JWT authentication endpoints',
     status: 'in-progress',
     lastMessage: 'Working on token refresh logic, about 1h left.',
