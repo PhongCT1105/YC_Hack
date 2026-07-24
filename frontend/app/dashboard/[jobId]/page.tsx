@@ -65,11 +65,19 @@ function TopBar({
   jobId,
   view,
   onViewChange,
+  onSeed,
+  seeding,
+  onSynthesize,
+  synthesizing,
 }: {
   workers: Worker[]
   jobId: string
   view: ViewMode
   onViewChange: (v: ViewMode) => void
+  onSeed: () => void
+  seeding: boolean
+  onSynthesize: () => void
+  synthesizing: boolean
 }) {
   const total = workers.length
   const done = workers.filter((w) => w.status === 'done').length
@@ -106,7 +114,7 @@ function TopBar({
         )}
       </div>
 
-      {/* Right: legend */}
+      {/* Right: legend + actions */}
       <div className="flex items-center gap-3">
         {(Object.entries(STATUS_LABELS) as [WorkerStatus, string][]).map(([status, label]) => (
           <div key={status} className="flex items-center gap-1.5">
@@ -117,6 +125,40 @@ function TopBar({
             <span className="text-xs text-gray-500">{label}</span>
           </div>
         ))}
+        <button
+          onClick={onSeed}
+          disabled={seeding}
+          className="text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-1 rounded-full transition-colors"
+        >
+          {seeding ? 'Seeding…' : '+ AI stand-in'}
+        </button>
+        <button
+          onClick={onSynthesize}
+          disabled={synthesizing}
+          className="text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-1 rounded-full transition-colors"
+        >
+          {synthesizing ? 'Synthesizing…' : 'Synthesize'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function ReportModal({ report, onClose }: { report: string; onClose: () => void }) {
+  return (
+    <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/70 p-8">
+      <div className="w-full max-w-3xl max-h-full flex flex-col bg-gray-900 border border-gray-700 rounded-lg shadow-2xl">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-800">
+          <span className="text-sm font-semibold text-white">Synthesis Report</span>
+          <button onClick={onClose} className="text-gray-400 hover:text-white text-sm">
+            ✕
+          </button>
+        </div>
+        <div className="overflow-y-auto px-5 py-4">
+          <pre className="whitespace-pre-wrap text-xs text-gray-200 font-sans leading-relaxed">
+            {report}
+          </pre>
+        </div>
       </div>
     </div>
   )
@@ -166,6 +208,9 @@ export default function DashboardPage({ params }: { params: { jobId: string } })
   const [workers, setWorkers] = useState<Worker[]>([])
   const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null)
   const [view, setView] = useState<ViewMode>('office')
+  const [seeding, setSeeding] = useState(false)
+  const [synthesizing, setSynthesizing] = useState(false)
+  const [report, setReport] = useState<string | null>(null)
 
   // Poll the live workers feed every 3s. Keeps the selected worker's panel
   // in sync by re-pointing it at the fresh object with the same id.
@@ -197,12 +242,45 @@ export default function DashboardPage({ params }: { params: { jobId: string } })
     setSelectedWorker(worker)
   }
 
+  const handleSeed = async () => {
+    setSeeding(true)
+    try {
+      await fetch('/api/seed', { method: 'POST' })
+    } catch {
+      // best-effort — next poll will show whatever state resulted
+    } finally {
+      setSeeding(false)
+    }
+  }
+
+  const handleSynthesize = async () => {
+    setSynthesizing(true)
+    try {
+      const res = await fetch('/api/synthesize', { method: 'POST' })
+      const data = await res.json()
+      if (data.report) setReport(data.report)
+    } catch {
+      // best-effort
+    } finally {
+      setSynthesizing(false)
+    }
+  }
+
   const recruiting = workers.length === 0
 
   return (
     <div className="w-screen h-screen relative overflow-hidden bg-gray-950">
       {/* Top navigation bar */}
-      <TopBar workers={workers} jobId={params.jobId} view={view} onViewChange={setView} />
+      <TopBar
+        workers={workers}
+        jobId={params.jobId}
+        view={view}
+        onViewChange={setView}
+        onSeed={handleSeed}
+        seeding={seeding}
+        onSynthesize={handleSynthesize}
+        synthesizing={synthesizing}
+      />
 
       {/* Worker list sidebar (left) — only meaningful for the office view */}
       {!recruiting && view === 'office' && (
@@ -261,6 +339,9 @@ export default function DashboardPage({ params }: { params: { jobId: string } })
           )}
         </>
       )}
+
+      {/* Synthesis report modal — overlays either view */}
+      {report && <ReportModal report={report} onClose={() => setReport(null)} />}
     </div>
   )
 }
