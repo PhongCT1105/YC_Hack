@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const BASE = process.env.LINQ_API_URL ?? 'https://api.linq.com/v1'
+const BASE = process.env.LINQ_API_URL ?? 'https://api.linqapp.com/api/partner/v3'
 const KEY  = process.env.LINQ_API_KEY ?? ''
+const FROM = process.env.LINQ_FROM_NUMBER ?? ''
 
 async function linqFetch(path: string, options?: RequestInit) {
   const res = await fetch(`${BASE}${path}`, {
     ...options,
+    cache: 'no-store',
     headers: {
       Authorization: `Bearer ${KEY}`,
       'Content-Type': 'application/json',
@@ -18,33 +20,43 @@ async function linqFetch(path: string, options?: RequestInit) {
 }
 
 export async function POST(req: NextRequest) {
-  const { phone, content, conversationId } = await req.json() as {
+  const { phone, content, chatId } = await req.json() as {
     phone: string
     content: string
-    conversationId?: string
+    chatId?: string
   }
-  if (!phone || !content) {
-    return NextResponse.json({ error: 'phone and content required' }, { status: 400 })
+  if (!content) {
+    return NextResponse.json({ error: 'content required' }, { status: 400 })
   }
 
   try {
-    let convId = conversationId
+    let resultChatId: string
 
-    // Create a new conversation if we don't have one yet
-    if (!convId) {
-      const created = await linqFetch('/conversations', {
+    if (chatId) {
+      // Send to existing chat
+      await linqFetch(`/chats/${chatId}/messages`, {
         method: 'POST',
-        body: JSON.stringify({ participant_id: phone }),
+        body: JSON.stringify({
+          message: { parts: [{ type: 'text', value: content }] },
+        }),
       })
-      convId = created.id as string
+      resultChatId = chatId
+    } else {
+      // Create new chat
+      if (!phone) return NextResponse.json({ error: 'phone required for new chat' }, { status: 400 })
+      const to = phone.startsWith('+') ? phone : `+${phone}`
+      const result = await linqFetch('/chats', {
+        method: 'POST',
+        body: JSON.stringify({
+          from: FROM,
+          to: [to],
+          message: { parts: [{ type: 'text', value: content }] },
+        }),
+      })
+      resultChatId = result.chat?.id
     }
 
-    const msg = await linqFetch(`/conversations/${convId}/messages`, {
-      method: 'POST',
-      body: JSON.stringify({ content, sender_type: 'agent' }),
-    })
-
-    return NextResponse.json({ ok: true, conversationId: convId, message: msg })
+    return NextResponse.json({ ok: true, chatId: resultChatId })
   } catch (err) {
     console.error('[linq/send]', err)
     return NextResponse.json({ error: String(err) }, { status: 500 })

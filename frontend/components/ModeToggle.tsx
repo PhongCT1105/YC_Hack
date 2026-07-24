@@ -17,7 +17,7 @@ export function ModeToggle() {
     <button
       onClick={handleToggle}
       title={isLive ? 'Switch to static mock data' : 'Switch to live APIs'}
-      className="fixed top-4 right-4 z-50 flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium transition-all select-none"
+      className="mode-toggle fixed top-4 right-4 z-50 flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium transition-all select-none"
       style={{
         background: isLive ? 'rgba(34,197,94,0.1)' : 'rgba(255,255,255,0.05)',
         borderColor: isLive ? 'rgba(34,197,94,0.4)' : 'rgba(255,255,255,0.12)',

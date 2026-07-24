@@ -2,6 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Message input placeholder */
+input::placeholder {
+  color: rgba(255, 255, 255, 0.25);
+}
+
+/* Hide the Live/Mock toggle when a worker panel is open */
+body[data-panel="open"] .mode-toggle {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  transition: opacity 0.2s, visibility 0.2s;
+}
+
 * {
   box-sizing: border-box;
   padding: 0;

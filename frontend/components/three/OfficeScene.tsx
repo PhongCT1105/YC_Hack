@@ -10,7 +10,8 @@ import type { Worker } from '@/types'
 
 // Camera sits at this offset above/behind the look-at target.
 // [10, 8, 10] gives a 45° isometric-ish view from the front-right corner.
-const CAMERA_OFFSET = new THREE.Vector3(10, 8, 10)
+const CAMERA_OFFSET = new THREE.Vector3(7, 5.5, 7)
+const CAMERA_OFFSET_ZOOMED = new THREE.Vector3(4, 3.5, 4)
 const DEFAULT_TARGET = new THREE.Vector3(0, 0.5, 0)
 
 function CameraRig({
@@ -25,16 +26,17 @@ function CameraRig({
 
   useFrame(() => {
     // Smooth pan: lerp look-at target
-    currentTarget.current.lerp(target, 0.055)
+    currentTarget.current.lerp(target, 0.06)
 
-    // Move camera to maintain fixed offset from target
-    camera.position.copy(currentTarget.current.clone().add(CAMERA_OFFSET))
+    // Interpolate camera offset for smooth zoom-in when a minion is selected
+    const offset = zoomed ? CAMERA_OFFSET_ZOOMED : CAMERA_OFFSET
+    camera.position.lerp(currentTarget.current.clone().add(offset), 0.06)
     camera.lookAt(currentTarget.current)
 
-    // Zoom in slightly (narrow FOV) when a minion is selected
+    // FOV also narrows when focused
     const perspCam = camera as THREE.PerspectiveCamera
-    const targetFOV = zoomed ? 44 : 55
-    perspCam.fov = THREE.MathUtils.lerp(perspCam.fov, targetFOV, 0.05)
+    const targetFOV = zoomed ? 38 : 46
+    perspCam.fov = THREE.MathUtils.lerp(perspCam.fov, targetFOV, 0.06)
     perspCam.updateProjectionMatrix()
   })
 
@@ -79,16 +81,16 @@ function Scene({
     <>
       <CameraRig target={cameraTarget} zoomed={zoomed} />
 
-      {/* Ambient fill — warm office feel */}
-      <ambientLight intensity={0.45} color="#FFF8E7" />
+      {/* Ambient fill — warm modern office */}
+      <ambientLight intensity={0.55} color="#FFF9F0" />
 
       {/* Main directional light — casts shadows from top-left */}
       <directionalLight
         position={[6, 14, 7]}
-        intensity={1.0}
-        color="#FFF5DC"
+        intensity={1.2}
+        color="#FFF8EE"
         castShadow
-        shadow-mapSize={[1024, 1024]}
+        shadow-mapSize={[2048, 2048]}
         shadow-camera-left={-14}
         shadow-camera-right={14}
         shadow-camera-top={14}
@@ -99,7 +101,7 @@ function Scene({
       />
 
       {/* Soft fill from opposite side */}
-      <directionalLight position={[-4, 6, -3]} intensity={0.3} color="#E0F0FF" />
+      <directionalLight position={[-4, 8, -3]} intensity={0.35} color="#E8F4FF" />
 
       <Room />
 
@@ -142,14 +144,14 @@ export default function OfficeScene({
   return (
     <Canvas
       camera={{
-        position: [10, 8, 10],
-        fov: 55,
+        position: [7, 5.5, 7],
+        fov: 46,
         near: 0.1,
         far: 120,
       }}
       shadows
       gl={{ antialias: true, alpha: false }}
-      style={{ width: '100%', height: '100%', background: '#1a1a2e' }}
+      style={{ width: '100%', height: '100%', background: '#12121e' }}
     >
       <Scene workers={workers} selectedId={selectedId} onSelect={onSelect} />
     </Canvas>

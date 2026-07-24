@@ -183,6 +183,7 @@ export default function GeneratePage() {
   // Stores generated file content keyed by filename
   const [storedFiles, setStoredFiles] = useState<Map<string, ViewableFile>>(new Map())
   const [fetchingFile, setFetchingFile] = useState<string | null>(null) // filename being fetched
+  const [liveError, setLiveError] = useState<string | null>(null)
 
   const logEndRef = useRef<HTMLDivElement>(null)
   const idRef = useRef(0)
@@ -195,6 +196,10 @@ export default function GeneratePage() {
   }, [log])
 
   useEffect(() => {
+    // Read mode directly from localStorage so we get the correct value
+    // regardless of whether ModeProvider's own useEffect has run yet.
+    const liveMode = localStorage.getItem('yc-hack-mode') === 'live'
+
     const cfg = jobStore.get()
     const count = cfg.workerCount ?? 6
     const problem = cfg.problem ?? 'Build a full-stack web application'
@@ -227,7 +232,7 @@ export default function GeneratePage() {
 
     async function run() {
       // ── Live mode: set up Supabase job + worker agents before animation ──
-      if (isLive) {
+      if (liveMode) {
         try {
           const jobId = await createJob({ problem, workerCount: count, deadline, linqPhone: cfg.linqPhone })
           jobIdRef.current = jobId
@@ -248,7 +253,9 @@ export default function GeneratePage() {
           )
           workerAgentIdsRef.current = agentIds
         } catch (err) {
-          console.error('[live] Failed to create job in Supabase:', err)
+          const msg = err instanceof Error ? err.message : String(err)
+          console.error('[live] Failed to create job/agents in Supabase:', err)
+          setLiveError(`Supabase setup failed: ${msg}`)
           // Continue with animation even if Supabase fails
         }
       }
@@ -272,7 +279,7 @@ export default function GeneratePage() {
           const fileType: 'md' | 'json' = isJson ? 'json' : 'md'
 
           let fileId: string | undefined
-          if (isLive && jobIdRef.current) {
+          if (liveMode && jobIdRef.current) {
             try {
               fileId = await createAgentFile({
                 jobId: jobIdRef.current,
@@ -282,7 +289,9 @@ export default function GeneratePage() {
                 sizeLabel: step.size,
               })
             } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err)
               console.error('[live] Failed to write file to Supabase:', err)
+              setLiveError(`Failed to write ${step.filename}: ${msg}`)
             }
           }
 
@@ -408,8 +417,11 @@ export default function GeneratePage() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5"/>
             </svg>
             <span className="text-xs font-medium text-white/50 uppercase tracking-widest">Orchestrator</span>
-            {isLive && (
+            {isLive && !liveError && (
               <span className="ml-auto text-[10px] text-green-400/60 font-mono">● live</span>
+            )}
+            {liveError && (
+              <span className="ml-auto text-[10px] text-red-400 font-mono truncate max-w-[160px]" title={liveError}>⚠ {liveError}</span>
             )}
           </div>
 
