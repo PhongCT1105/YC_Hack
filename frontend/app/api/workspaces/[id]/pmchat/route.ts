@@ -195,8 +195,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
           isError = true
         }
       } catch (err) {
-        console.error('planner tool failed', err instanceof Error ? err.message : String(err))
-        resultContent = 'The Terac or workspace request failed. Ask the owner to retry.'
+        const detail = (err instanceof Error ? err.message : String(err)).slice(0, 300)
+        console.error('planner tool failed', detail)
+        resultContent = `Tool call failed. Raw error (relay the gist honestly to the user, do not speculate beyond it): ${detail}`
         isError = true
       }
 
