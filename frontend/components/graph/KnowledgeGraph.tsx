@@ -90,45 +90,85 @@ function computeLayout(nodes: ApiNode[], edges: ApiEdge[]) {
 
 // ---------- Node rendering ----------
 
-const STATUS_STYLES: Record<string, string> = {
-  open: 'border-gray-500 bg-gray-800 text-gray-200',
-  claimed: 'border-amber-500 bg-amber-950 text-amber-100',
-  submitted: 'border-green-500 bg-green-950 text-green-100',
+const SUBTASK_GLOW: Record<string, { border: string; glow: string; bg: string; label: string }> = {
+  open:      { border: 'rgba(107,114,128,0.85)', glow: 'rgba(107,114,128,0.4)',  bg: 'rgba(17,24,39,0.95)',  label: '#9ca3af' },
+  claimed:   { border: 'rgba(245,158,11,0.85)',  glow: 'rgba(245,158,11,0.35)', bg: 'rgba(41,26,4,0.95)',   label: '#fbbf24' },
+  submitted: { border: 'rgba(34,197,94,0.85)',   glow: 'rgba(34,197,94,0.35)',  bg: 'rgba(2,30,12,0.95)',   label: '#4ade80' },
 }
 
-const CONFIDENCE_BORDER: Record<string, string> = {
-  high: 'border-green-400',
-  medium: 'border-amber-400',
-  low: 'border-red-400',
+const FINDING_GLOW: Record<string, { border: string; glow: string }> = {
+  high:   { border: 'rgba(74,222,128,0.85)',  glow: 'rgba(74,222,128,0.35)' },
+  medium: { border: 'rgba(251,191,36,0.85)',  glow: 'rgba(251,191,36,0.35)' },
+  low:    { border: 'rgba(248,113,113,0.85)', glow: 'rgba(248,113,113,0.35)' },
+}
+
+const GLOW_ANIM: React.CSSProperties = {
+  animation: 'node-glow-pulse 3s ease-in-out infinite',
 }
 
 function QuestionNode({ data }: NodeProps<{ label: string; compact?: boolean }>) {
+  const size = data.compact ? 88 : 140
   return (
-    <div
-      className={`rounded-xl border-2 border-indigo-400 bg-gray-950 text-white shadow-xl px-5 py-4 font-semibold ${
-        data.compact ? 'max-w-[200px] text-[11px] px-3 py-2' : 'max-w-[380px] text-sm'
-      }`}
-    >
+    <div style={{ position: 'relative', width: size, height: size }}>
       <Handle type="source" position={Position.Bottom} />
-      <div className="text-[10px] uppercase tracking-widest text-indigo-300 mb-1">
-        Research Question
+      <div
+        style={{
+          width: size, height: size,
+          borderRadius: '50%',
+          background: 'radial-gradient(circle at 35% 30%, rgba(129,140,248,0.22), rgba(8,8,20,0.96))',
+          border: '2px solid rgba(129,140,248,0.9)',
+          boxShadow: '0 0 20px rgba(99,102,241,0.65), 0 0 44px rgba(99,102,241,0.22)',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          textAlign: 'center', padding: data.compact ? 10 : 16,
+          ...GLOW_ANIM,
+          animationDelay: '0s',
+        }}
+      >
+        <div style={{ fontSize: 7, color: 'rgba(165,180,252,0.7)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>
+          Question
+        </div>
+        <div style={{
+          fontSize: data.compact ? 9 : 10, color: 'white', fontWeight: 700, lineHeight: 1.3,
+          overflow: 'hidden', display: '-webkit-box',
+          WebkitLineClamp: data.compact ? 3 : 5, WebkitBoxOrient: 'vertical',
+        }}>
+          {data.label}
+        </div>
       </div>
-      <div className="leading-snug">{data.label}</div>
     </div>
   )
 }
 
 function SubtaskNode({ data }: NodeProps<{ label: string; status: string; compact?: boolean }>) {
-  const style = STATUS_STYLES[data.status] ?? STATUS_STYLES.open
+  const s = SUBTASK_GLOW[data.status] ?? SUBTASK_GLOW.open
+  const size = data.compact ? 72 : 104
   return (
-    <div
-      className={`rounded-lg border-2 shadow-md px-4 py-3 ${style} ${
-        data.compact ? 'max-w-[150px] text-[10px] px-2 py-1.5' : 'max-w-[220px] text-xs'
-      }`}
-    >
+    <div style={{ position: 'relative', width: size, height: size }}>
       <Handle type="target" position={Position.Top} />
-      <div className="text-[9px] uppercase tracking-widest opacity-70 mb-1">{data.status}</div>
-      <div className="font-semibold leading-snug">{data.label}</div>
+      <div
+        style={{
+          width: size, height: size,
+          borderRadius: '50%',
+          background: `radial-gradient(circle at 35% 30%, ${s.bg.replace('0.95', '0.6')}, ${s.bg})`,
+          border: `2px solid ${s.border}`,
+          boxShadow: `0 0 14px ${s.glow}, 0 0 28px ${s.glow}`,
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          textAlign: 'center', padding: data.compact ? 8 : 12,
+          ...GLOW_ANIM,
+          animationDelay: '0.6s',
+        }}
+      >
+        <div style={{ fontSize: 7, color: s.label, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 3 }}>
+          {data.status}
+        </div>
+        <div style={{
+          fontSize: data.compact ? 8 : 9, color: 'white', fontWeight: 600, lineHeight: 1.25,
+          overflow: 'hidden', display: '-webkit-box',
+          WebkitLineClamp: 3, WebkitBoxOrient: 'vertical',
+        }}>
+          {data.label}
+        </div>
+      </div>
       <Handle type="source" position={Position.Bottom} />
     </div>
   )
@@ -145,7 +185,8 @@ function FindingNode({
   simulated?: boolean
   compact?: boolean
 }>) {
-  const borderColor = CONFIDENCE_BORDER[data.confidence] ?? 'border-gray-500'
+  const g = FINDING_GLOW[data.confidence] ?? FINDING_GLOW.medium
+  const size = data.compact ? 60 : 84
 
   const handleClick = () => {
     if (data.source_url) window.open(data.source_url, '_blank', 'noopener,noreferrer')
@@ -153,22 +194,39 @@ function FindingNode({
 
   return (
     <div
+      style={{ position: 'relative', width: size, height: size, cursor: data.source_url ? 'pointer' : 'default' }}
       onClick={handleClick}
-      className={`rounded-md border-2 ${borderColor} bg-gray-900 text-gray-100 shadow px-3 py-2 cursor-pointer hover:brightness-125 transition ${
-        data.compact ? 'max-w-[130px] text-[9px] px-2 py-1' : 'max-w-[200px] text-[11px]'
-      }`}
       title={data.source_url ? 'Click to open source' : undefined}
     >
       <Handle type="target" position={Position.Top} />
-      <div className="flex items-center gap-1 mb-1 flex-wrap">
-        <span className="text-[9px] font-semibold text-gray-400">{data.codename ?? '?'}</span>
-        {data.simulated && (
-          <span className="text-[8px] uppercase tracking-wide bg-purple-900 text-purple-200 px-1 rounded">
-            AI stand-in
-          </span>
-        )}
+      <div
+        style={{
+          width: size, height: size,
+          borderRadius: '50%',
+          background: 'radial-gradient(circle at 35% 30%, rgba(30,30,46,0.9), rgba(8,8,20,0.97))',
+          border: `2px solid ${g.border}`,
+          boxShadow: `0 0 12px ${g.glow}, 0 0 24px ${g.glow}`,
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          textAlign: 'center', padding: data.compact ? 6 : 10,
+          transition: 'filter 150ms',
+          ...GLOW_ANIM,
+          animationDelay: '1.2s',
+        }}
+        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.filter = 'brightness(1.3)' }}
+        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.filter = '' }}
+      >
+        <div style={{ fontSize: 7, color: 'rgba(156,163,175,0.8)', fontWeight: 600, marginBottom: 2 }}>
+          {data.codename ?? '?'}
+          {data.simulated && <span style={{ color: '#c4b5fd', marginLeft: 2 }}>·AI</span>}
+        </div>
+        <div style={{
+          fontSize: data.compact ? 7 : 9, color: 'rgba(255,255,255,0.9)', lineHeight: 1.25,
+          overflow: 'hidden', display: '-webkit-box',
+          WebkitLineClamp: 3, WebkitBoxOrient: 'vertical',
+        }}>
+          {data.label}
+        </div>
       </div>
-      <div className="leading-snug">{data.label}</div>
       <Handle type="source" position={Position.Bottom} />
     </div>
   )

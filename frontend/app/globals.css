@@ -15,6 +15,38 @@ body[data-panel="open"] .mode-toggle {
   transition: opacity 0.2s, visibility 0.2s;
 }
 
+/* ── Markdown report prose ───────────────────────────────────────── */
+.prose-report { color: #e2e8f0; font-size: 0.9rem; line-height: 1.75; }
+
+.prose-report h1 { color: #fff; font-size: 1.5rem; font-weight: 700; margin: 0 0 1.25rem; letter-spacing: -0.02em; }
+.prose-report h2 { color: #c7d2fe; font-size: 1.05rem; font-weight: 700; margin: 2rem 0 0.6rem; padding-bottom: 0.4rem; border-bottom: 1px solid rgba(99,102,241,0.25); }
+.prose-report h3 { color: #a5b4fc; font-size: 0.9rem; font-weight: 600; margin: 1.25rem 0 0.4rem; }
+
+.prose-report p { margin: 0.6rem 0; }
+.prose-report strong { color: #fff; font-weight: 600; }
+.prose-report em { color: #94a3b8; font-style: italic; }
+
+.prose-report ul { list-style: none; padding: 0; margin: 0.6rem 0; }
+.prose-report ul li { position: relative; padding-left: 1.2rem; margin: 0.35rem 0; color: #cbd5e1; }
+.prose-report ul li::before { content: '·'; position: absolute; left: 0; color: #6366f1; font-weight: 700; }
+
+.prose-report ol { padding-left: 1.4rem; margin: 0.6rem 0; }
+.prose-report ol li { margin: 0.35rem 0; color: #cbd5e1; }
+
+.prose-report code { background: rgba(99,102,241,0.12); color: #a5b4fc; font-family: monospace; font-size: 0.82em; padding: 0.1em 0.4em; border-radius: 4px; }
+.prose-report pre { background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 1rem; overflow-x: auto; margin: 1rem 0; }
+.prose-report pre code { background: none; padding: 0; color: #e2e8f0; }
+
+.prose-report blockquote { border-left: 3px solid rgba(99,102,241,0.5); margin: 1rem 0; padding: 0.5rem 0 0.5rem 1rem; color: #94a3b8; font-style: italic; }
+
+.prose-report hr { border: none; border-top: 1px solid rgba(255,255,255,0.08); margin: 1.5rem 0; }
+
+/* Knowledge graph node glow pulse */
+@keyframes node-glow-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.72; }
+}
+
 * {
   box-sizing: border-box;
   padding: 0;

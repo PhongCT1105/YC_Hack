@@ -1,7 +1,8 @@
 'use client'
 
 import dynamic from 'next/dynamic'
-import { useEffect, useMemo, useState } from 'react'
+import { marked } from 'marked'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { WorkerPanel } from '@/components/WorkerPanel'
 import {
@@ -9,11 +10,21 @@ import {
   type Workspace,
 } from '@/components/workspace/WorkspaceSidebar'
 import { PmChatPanel } from '@/components/workspace/PmChatPanel'
-import { AgentChatPanel } from '@/components/AgentChatPanel'
 import { adminHeaders } from '@/lib/workspaceClient'
 import { dashboardWorkspaceHref } from '@/lib/dashboardNavigation'
 import { MOCK_WORKERS } from '@/lib/mockWorkers'
 import type { Worker } from '@/types'
+
+type LinqMessage = {
+  id: string
+  sender?: string
+  from?: string
+  message: { parts: { type: string; value: string }[] }
+  created_at?: string
+  sentAt?: string
+}
+
+const FROM_DIGITS = '12055030476'
 
 const MOCK_WORKSPACE: Workspace = {
   id: 'mock-001',
@@ -25,6 +36,43 @@ const MOCK_WORKSPACE: Workspace = {
   subtasksDone: 2,
   subtasksTotal: 6,
 }
+
+const MOCK_REPORT = `# Research Synthesis Report
+
+## Summary
+Based on findings from 6 researchers working in parallel on authentication system design, we have sufficient evidence to recommend a modern JWT + refresh-token architecture with bcrypt password hashing and a multi-tenant UUID-based schema.
+
+## Key Findings
+
+- **JWT Authentication** (Alex K.): POST /auth/register and POST /auth/login implemented with bcrypt (12 rounds). Token refresh logic adds a buffer before expiry. [Source: internal implementation]
+
+- **Database Schema** (Maya R.): Postgres schema finalised with users, sessions, and refresh_tokens tables using UUID v4 PKs and tenant_id FK on every table for strict multi-tenancy. [Source: migrations v1.0]
+
+- **Test Coverage** (Sam T.): Unit test suite achieves 84% coverage using pytest-mock — no real DB required. Waiting on final code review. [Source: CI pipeline report]
+
+- **Dashboard UI** (Jordan L.): Blocked pending API spec for the session history endpoint. Tailwind + shadcn/ui selected as design system.
+
+- **CI/CD Pipeline** (Priya S.): GitHub Actions pipeline operational (lint → test → build). Deploy step to Fly.io in progress using FLY_API_TOKEN secret. [Source: GitHub Actions logs]
+
+- **API Documentation** (Chris M.): OpenAPI 3.0 documentation pending completion of endpoint implementation.
+
+## Points of Agreement
+
+1. UUID v4 is the correct primary key choice for a multi-tenant system
+2. bcrypt with 12 rounds balances security and performance appropriately
+3. Test coverage target of >80% is achievable and already met
+4. Fly.io is the deployment target with secrets managed in GitHub
+
+## Contradictions & Open Questions
+
+- **Jordan L. is blocked** — cannot proceed without the session history API spec. This creates a dependency chain: API implementation → UI → API docs. Both Jordan (dashboard) and Chris (docs) are downstream of Alex's endpoint work.
+- CI/CD deploy step is functional but not verified end-to-end; confidence is medium until first successful production deploy.
+
+## Confidence Notes
+
+- **High confidence**: Schema design (Maya), auth endpoints (Alex), test coverage (Sam) — all evidence submitted and reviewed
+- **Medium confidence**: CI/CD pipeline (Priya) — functional but deploy step unverified
+- **Low confidence**: Dashboard (Jordan) and API docs (Chris) — both blocked on upstream work`
 
 const OfficeScene = dynamic(() => import('@/components/three/OfficeScene'), {
   ssr: false,
@@ -179,13 +227,16 @@ function ReportView({ report }: { report: string | null }) {
     )
   }
 
+  const html = marked(report, { breaks: true }) as string
+
   return (
-    <div className="h-full overflow-y-auto px-5 py-20 md:px-10 lg:px-16">
+    <div className="h-full overflow-y-auto px-5 py-16 md:px-10 lg:px-16">
       <article className="mx-auto max-w-3xl">
-        <p className="text-xs font-semibold text-indigo-300">Synthesis report</p>
-        <pre className="mt-4 whitespace-pre-wrap font-sans text-sm leading-7 text-gray-200">
-          {report}
-        </pre>
+        <p className="mb-6 text-xs font-semibold text-indigo-300">Synthesis report</p>
+        <div
+          className="prose-report"
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
       </article>
     </div>
   )
@@ -208,6 +259,11 @@ export default function DashboardPage({
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [plannerOpen, setPlannerOpen] = useState(false)
   const [agentChatOpen, setAgentChatOpen] = useState(false)
+  const [managerMessages, setManagerMessages] = useState<LinqMessage[]>([])
+  const [managerChatId, setManagerChatId] = useState<string | null>(null)
+  const [managerInput, setManagerInput] = useState('')
+  const [managerSending, setManagerSending] = useState(false)
+  const managerEndRef = useRef<HTMLDivElement>(null)
   const [useMock, setUseMock] = useState(false)
   const [seeding, setSeeding] = useState(false)
   const [synthesizing, setSynthesizing] = useState(false)
@@ -289,6 +345,45 @@ export default function DashboardPage({
     }
   }, [useMock, adminKey, selectedWorkspace])
 
+  useEffect(() => {
+    if (!agentChatOpen) return
+    let cancelled = false
+    async function poll() {
+      try {
+        const res = await fetch('/api/linq/manager-thread', { cache: 'no-store' })
+        const data = await res.json()
+        if (cancelled) return
+        setManagerMessages(data.messages ?? [])
+        if (data.chatId) setManagerChatId(data.chatId)
+      } catch { /* non-fatal */ }
+    }
+    poll()
+    const interval = setInterval(poll, 3000)
+    return () => { cancelled = true; clearInterval(interval) }
+  }, [agentChatOpen])
+
+  useEffect(() => {
+    managerEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [managerMessages])
+
+  async function handleManagerSend() {
+    const content = managerInput.trim()
+    if (!content || managerSending) return
+    setManagerInput('')
+    setManagerSending(true)
+    try {
+      const res = await fetch('/api/linq/manager-thread', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ content, chatId: managerChatId }),
+      })
+      const data = await res.json()
+      if (data.chatId) setManagerChatId(data.chatId)
+    } catch { /* non-fatal */ } finally {
+      setManagerSending(false)
+    }
+  }
+
   function selectWorkspace(id: string) {
     router.push(dashboardWorkspaceHref(id, adminKey))
   }
@@ -330,6 +425,11 @@ export default function DashboardPage({
   }
 
   async function handleSynthesize() {
+    if (useMock) {
+      setGeneratedReport(MOCK_REPORT)
+      setView('report')
+      return
+    }
     if (!adminKey || !selectedWorkspace) return
     setActionError(null)
     setSynthesizing(true)
@@ -422,59 +522,147 @@ export default function DashboardPage({
           <ViewToggle view={view} onChange={setView} />
         </div>
 
-        {/* Floating action bar — top right */}
+        {/* Floating action bar — top right (expands down for agent chat) */}
         <div
-          className="absolute right-3 top-3 z-20 flex items-center gap-1.5"
+          className="absolute right-3 top-3 z-20 flex flex-col overflow-hidden"
           style={{
             background: 'rgba(8,8,16,0.6)',
             backdropFilter: 'blur(24px)',
             WebkitBackdropFilter: 'blur(24px)',
             border: '1px solid rgba(255,255,255,0.08)',
-            borderRadius: 16,
-            padding: '6px 8px',
+            borderRadius: agentChatOpen ? 20 : 16,
+            minWidth: agentChatOpen ? 320 : undefined,
+            transition: 'border-radius 250ms, min-width 250ms',
           }}
         >
-          <button
-            onClick={() => { setPlannerOpen(false); setAgentChatOpen((v) => !v) }}
-            title="Message the orchestrator agent"
-            className="flex h-7 w-7 items-center justify-center rounded-xl text-base transition-colors"
-            style={{ background: agentChatOpen ? 'rgba(99,102,241,0.3)' : 'rgba(255,255,255,0.06)' }}
-          >
-            🤖
-          </button>
-          <button
-            onClick={openPlanner}
-            disabled={!selectedWorkspace || !adminKey}
-            className="rounded-xl px-2.5 py-1 text-xs font-semibold text-indigo-200 transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+          {/* Buttons row */}
+          <div className="flex items-center gap-1.5 p-2">
+            <button
+              onClick={() => { setPlannerOpen(false); setAgentChatOpen((v) => !v) }}
+              title="Message the orchestrator agent"
+              className="flex h-7 w-7 items-center justify-center rounded-xl text-base transition-colors"
+              style={{ background: agentChatOpen ? 'rgba(99,102,241,0.3)' : 'rgba(255,255,255,0.06)' }}
+            >
+              🤖
+            </button>
+            <button
+              onClick={openPlanner}
+              disabled={!selectedWorkspace || !adminKey}
+              className="rounded-xl px-2.5 py-1 text-xs font-semibold text-indigo-200 transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+              style={{
+                background: plannerOpen ? 'rgba(99,102,241,0.3)' : 'rgba(99,102,241,0.15)',
+                border: '1px solid rgba(99,102,241,0.25)',
+              }}
+            >
+              Planner
+            </button>
+            <button
+              onClick={() => void handleSeed()}
+              disabled={!selectedWorkspace || !adminKey || seeding}
+              className="hidden rounded-xl px-2.5 py-1 text-xs font-semibold text-gray-300 transition-colors disabled:cursor-not-allowed disabled:opacity-40 sm:block"
+              style={{
+                background: 'rgba(255,255,255,0.07)',
+                border: '1px solid rgba(255,255,255,0.08)',
+              }}
+            >
+              {seeding ? 'Adding...' : 'Add AI expert'}
+            </button>
+            <button
+              onClick={() => void handleSynthesize()}
+              disabled={!selectedWorkspace || !adminKey || synthesizing}
+              className="hidden rounded-xl px-2.5 py-1 text-xs font-semibold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40 md:block"
+              style={{
+                background: 'rgba(99,102,241,0.6)',
+                border: '1px solid rgba(99,102,241,0.3)',
+              }}
+            >
+              {synthesizing ? 'Writing...' : 'Synthesize'}
+            </button>
+          </div>
+
+          {/* Linq chat — animates open/closed below the buttons */}
+          <div
             style={{
-              background: plannerOpen ? 'rgba(99,102,241,0.3)' : 'rgba(99,102,241,0.15)',
-              border: '1px solid rgba(99,102,241,0.25)',
+              maxHeight: agentChatOpen ? '480px' : '0px',
+              opacity: agentChatOpen ? 1 : 0,
+              overflow: 'hidden',
+              pointerEvents: agentChatOpen ? 'auto' : 'none',
+              transition: 'max-height 380ms cubic-bezier(0.4,0,0.2,1), opacity 220ms ease',
+              borderTop: agentChatOpen ? '1px solid rgba(255,255,255,0.07)' : 'none',
             }}
           >
-            Planner
-          </button>
-          <button
-            onClick={() => void handleSeed()}
-            disabled={!selectedWorkspace || !adminKey || seeding}
-            className="hidden rounded-xl px-2.5 py-1 text-xs font-semibold text-gray-300 transition-colors disabled:cursor-not-allowed disabled:opacity-40 sm:block"
-            style={{
-              background: 'rgba(255,255,255,0.07)',
-              border: '1px solid rgba(255,255,255,0.08)',
-            }}
-          >
-            {seeding ? 'Adding...' : 'Add AI expert'}
-          </button>
-          <button
-            onClick={() => void handleSynthesize()}
-            disabled={!selectedWorkspace || !adminKey || synthesizing}
-            className="hidden rounded-xl px-2.5 py-1 text-xs font-semibold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40 md:block"
-            style={{
-              background: 'rgba(99,102,241,0.6)',
-              border: '1px solid rgba(99,102,241,0.3)',
-            }}
-          >
-            {synthesizing ? 'Writing...' : 'Synthesize'}
-          </button>
+            {/* Header */}
+            <div className="flex items-center gap-2 px-3 py-2">
+              <span className="text-base">🤖</span>
+              <div>
+                <p className="text-xs font-semibold text-white">Orchestrator</p>
+                <p className="text-[10px] text-white/30">+1 (205) 503-0476 · SMS</p>
+              </div>
+            </div>
+
+            {/* Messages */}
+            <div
+              className="overflow-y-auto px-3 py-2 space-y-1.5"
+              style={{ height: 300, borderTop: '1px solid rgba(255,255,255,0.05)' }}
+            >
+              {managerMessages.length === 0 && (
+                <p className="text-center text-[11px] text-white/20 pt-8">
+                  No messages yet. Send one below.
+                </p>
+              )}
+              {managerMessages.map((msg) => {
+                const senderPhone = String(msg.sender ?? msg.from ?? '')
+                const isUs = senderPhone.replace(/\D/g, '').includes(FROM_DIGITS)
+                const text = msg.message?.parts?.find((p) => p.type === 'text')?.value ?? ''
+                return (
+                  <div key={msg.id} className={`flex ${isUs ? 'justify-end' : 'justify-start'}`}>
+                    <div
+                      className="max-w-[82%] px-3 py-2 text-xs leading-relaxed"
+                      style={{
+                        background: isUs ? '#0A84FF' : 'rgba(58,58,62,0.9)',
+                        color: 'white',
+                        borderRadius: isUs ? '14px 14px 3px 14px' : '14px 14px 14px 3px',
+                      }}
+                    >
+                      {text}
+                    </div>
+                  </div>
+                )
+              })}
+              <div ref={managerEndRef} />
+            </div>
+
+            {/* Input */}
+            <div
+              className="flex items-center gap-2 px-2 py-2"
+              style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}
+            >
+              <input
+                className="flex-1 rounded-full px-3 py-1.5 text-xs text-white focus:outline-none"
+                style={{
+                  background: 'rgba(255,255,255,0.07)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                }}
+                placeholder="Message the orchestrator..."
+                value={managerInput}
+                disabled={managerSending}
+                onChange={(e) => setManagerInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void handleManagerSend() }
+                }}
+              />
+              <button
+                onClick={() => void handleManagerSend()}
+                disabled={!managerInput.trim() || managerSending}
+                className="flex h-7 w-7 items-center justify-center rounded-full flex-shrink-0 transition-all disabled:opacity-25"
+                style={{ background: managerInput.trim() && !managerSending ? '#6366F1' : 'rgba(255,255,255,0.1)' }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 19V5M5 12l7-7 7 7"/>
+                </svg>
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Main content */}
@@ -533,13 +721,6 @@ export default function DashboardPage({
           adminKey={adminKey}
           open={plannerOpen}
           onClose={() => setPlannerOpen(false)}
-        />
-
-        <AgentChatPanel
-          open={agentChatOpen}
-          onClose={() => setAgentChatOpen(false)}
-          sprintId={selectedWorkspace?.id ?? null}
-          adminKey={adminKey}
         />
 
         {/* Mock mode toggle — bottom right */}
