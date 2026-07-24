@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { isAdminRequest } from '@/lib/admin'
+import { requiredWorkspaceId } from '@/lib/workspaceRequest'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -22,14 +24,57 @@ function ago(ts: string): string {
   return m < 1 ? 'just now' : `${m} min ago`
 }
 
-export async function GET() {
-  const { data: sprint } = await db.from('sprints').select('id').order('created_at', { ascending: false }).limit(1).single()
-  if (!sprint) return NextResponse.json([])
+export async function GET(req: Request) {
+  if (!isAdminRequest(req)) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  }
 
-  const { data: participants } = await db.from('participants').select().eq('sprint_id', sprint.id).order('joined_at')
-  const { data: subtasks } = await db.from('subtasks').select().eq('sprint_id', sprint.id)
-  const { data: allMessages } = await db.from('messages').select()
-    .in('submission_id', (participants ?? []).map((p) => p.submission_id)).order('ts')
+  const sprintId = requiredWorkspaceId(req)
+  if (!sprintId) {
+    return NextResponse.json({ error: 'sprintId required' }, { status: 400 })
+  }
+
+  const { data: sprint, error: sprintError } = await db
+    .from('sprints')
+    .select('id')
+    .eq('id', sprintId)
+    .maybeSingle()
+  if (sprintError) {
+    return NextResponse.json({ error: sprintError.message }, { status: 500 })
+  }
+  if (!sprint) {
+    return NextResponse.json({ error: 'workspace not found' }, { status: 404 })
+  }
+
+  const { data: participants, error: participantError } = await db
+    .from('participants')
+    .select()
+    .eq('sprint_id', sprint.id)
+    .order('joined_at')
+  if (participantError) {
+    return NextResponse.json({ error: participantError.message }, { status: 500 })
+  }
+
+  const { data: subtasks, error: subtaskError } = await db
+    .from('subtasks')
+    .select()
+    .eq('sprint_id', sprint.id)
+  if (subtaskError) {
+    return NextResponse.json({ error: subtaskError.message }, { status: 500 })
+  }
+
+  const submissionIds = (participants ?? []).map((p) => p.submission_id)
+  const messageResult = submissionIds.length
+    ? await db
+        .from('messages')
+        .select()
+        .in('submission_id', submissionIds)
+        .order('ts')
+    : { data: [], error: null }
+  if (messageResult.error) {
+    return NextResponse.json({ error: messageResult.error.message }, { status: 500 })
+  }
+  const allMessages = messageResult.data ?? []
 
   const workers = (participants ?? []).map((p, i) => {
     const st = (subtasks ?? []).find((s) => s.claimed_by === p.submission_id)

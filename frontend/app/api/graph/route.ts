@@ -1,12 +1,32 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { isAdminRequest } from '@/lib/admin'
+import { requiredWorkspaceId } from '@/lib/workspaceRequest'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-export async function GET() {
-  const { data: sprint } = await db.from('sprints').select().order('created_at', { ascending: false }).limit(1).single()
-  if (!sprint) return NextResponse.json({ sprint: null, nodes: [], edges: [] })
+export async function GET(req: Request) {
+  if (!isAdminRequest(req)) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  }
+
+  const sprintId = requiredWorkspaceId(req)
+  if (!sprintId) {
+    return NextResponse.json({ error: 'sprintId required' }, { status: 400 })
+  }
+
+  const { data: sprint, error: sprintError } = await db
+    .from('sprints')
+    .select()
+    .eq('id', sprintId)
+    .maybeSingle()
+  if (sprintError) {
+    return NextResponse.json({ error: sprintError.message }, { status: 500 })
+  }
+  if (!sprint) {
+    return NextResponse.json({ error: 'workspace not found' }, { status: 404 })
+  }
 
   const { data: subtasks } = await db.from('subtasks').select().eq('sprint_id', sprint.id).order('id')
   const ids = (subtasks ?? []).map((s) => s.id)

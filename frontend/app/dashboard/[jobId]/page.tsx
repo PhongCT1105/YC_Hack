@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { WorkerPanel } from '@/components/WorkerPanel'
 import { STATUS_COLORS } from '@/components/three/Minion'
 import type { Worker, WorkerStatus } from '@/types'
+import { adminHeaders } from '@/lib/workspaceClient'
 
 // R3F canvas must be client-only (no SSR)
 const OfficeScene = dynamic(() => import('@/components/three/OfficeScene'), {
@@ -236,11 +237,15 @@ export default function DashboardPage({ params }: { params: { jobId: string } })
   // Poll the live workers feed every 3s. Keeps the selected worker's panel
   // in sync by re-pointing it at the fresh object with the same id.
   useEffect(() => {
+    if (!adminKey || params.jobId === 'new') return
     let cancelled = false
 
     async function poll() {
       try {
-        const res = await fetch('/api/workers')
+        const res = await fetch(
+          `/api/workers?sprintId=${encodeURIComponent(params.jobId)}`,
+          { headers: adminHeaders(adminKey) }
+        )
         if (!res.ok || cancelled) return
         const fresh: Worker[] = await res.json()
         if (cancelled) return
@@ -257,7 +262,7 @@ export default function DashboardPage({ params }: { params: { jobId: string } })
       cancelled = true
       clearInterval(interval)
     }
-  }, [])
+  }, [adminKey, params.jobId])
 
   const handleSelect = (worker: Worker | null) => {
     setSelectedWorker(worker)
@@ -268,7 +273,14 @@ export default function DashboardPage({ params }: { params: { jobId: string } })
     setActionError(null)
     setSeeding(true)
     try {
-      const res = await fetch('/api/seed', { method: 'POST', headers: { 'x-admin-key': adminKey } })
+      const res = await fetch('/api/seed', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          ...adminHeaders(adminKey),
+        },
+        body: JSON.stringify({ sprintId: params.jobId }),
+      })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) setActionError(data.error ?? `seed failed (${res.status})`)
     } catch (e) {
@@ -283,7 +295,14 @@ export default function DashboardPage({ params }: { params: { jobId: string } })
     setActionError(null)
     setSynthesizing(true)
     try {
-      const res = await fetch('/api/synthesize', { method: 'POST', headers: { 'x-admin-key': adminKey } })
+      const res = await fetch('/api/synthesize', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          ...adminHeaders(adminKey),
+        },
+        body: JSON.stringify({ sprintId: params.jobId }),
+      })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) setActionError(data.error ?? `synthesize failed (${res.status})`)
       else if (data.report) setReport(data.report)
@@ -344,7 +363,12 @@ export default function DashboardPage({ params }: { params: { jobId: string } })
                   onSelect={handleSelect}
                 />
               ) : (
-                <KnowledgeGraph pollMs={3000} compact={false} />
+                <KnowledgeGraph
+                  pollMs={3000}
+                  compact={false}
+                  sprintId={params.jobId}
+                  adminKey={adminKey}
+                />
               )}
             </div>
           </div>

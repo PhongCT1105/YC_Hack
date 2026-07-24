@@ -20,6 +20,7 @@ import ReactFlow, {
   type NodeTypes,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
+import { adminHeaders } from '@/lib/workspaceClient'
 
 // ---------- API shapes ----------
 
@@ -284,7 +285,17 @@ function buildEdge(e: ApiEdge): Edge {
 
 // ---------- Inner component (needs ReactFlowProvider context) ----------
 
-function KnowledgeGraphInner({ pollMs, compact }: { pollMs: number; compact: boolean }) {
+function KnowledgeGraphInner({
+  pollMs,
+  compact,
+  sprintId,
+  adminKey,
+}: {
+  pollMs: number
+  compact: boolean
+  sprintId: string
+  adminKey: string | null
+}) {
   const [graph, setGraph] = useState<GraphResponse | null>(null)
   const lastNodeCount = useRef<number>(-1)
   const { fitView } = useReactFlow()
@@ -293,7 +304,11 @@ function KnowledgeGraphInner({ pollMs, compact }: { pollMs: number; compact: boo
     let cancelled = false
     const poll = async () => {
       try {
-        const res = await fetch('/api/graph', { cache: 'no-store' })
+        const url = `/api/graph?sprintId=${encodeURIComponent(sprintId)}`
+        const res = await fetch(url, {
+          cache: 'no-store',
+          headers: adminHeaders(adminKey),
+        })
         if (!res.ok) return
         const data: GraphResponse = await res.json()
         if (!cancelled) setGraph(data)
@@ -307,7 +322,7 @@ function KnowledgeGraphInner({ pollMs, compact }: { pollMs: number; compact: boo
       cancelled = true
       clearInterval(id)
     }
-  }, [pollMs])
+  }, [adminKey, pollMs, sprintId])
 
   const { nodes, edges } = useMemo(() => {
     if (!graph) return { nodes: [] as Node[], edges: [] as Edge[] }
@@ -352,13 +367,22 @@ function KnowledgeGraphInner({ pollMs, compact }: { pollMs: number; compact: boo
 export default function KnowledgeGraph({
   pollMs = 3000,
   compact = false,
+  sprintId,
+  adminKey,
 }: {
   pollMs?: number
   compact?: boolean
+  sprintId: string
+  adminKey: string | null
 }) {
   return (
     <ReactFlowProvider>
-      <KnowledgeGraphInner pollMs={pollMs} compact={compact} />
+      <KnowledgeGraphInner
+        pollMs={pollMs}
+        compact={compact}
+        sprintId={sprintId}
+        adminKey={adminKey}
+      />
     </ReactFlowProvider>
   )
 }
