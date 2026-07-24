@@ -5,7 +5,11 @@ import { synthesize } from '@/lib/agent'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-export async function POST() {
+export async function POST(req: Request) {
+  if (req.headers.get('x-admin-key') !== process.env.ADMIN_KEY) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  }
+
   const { data: sprint } = await db.from('sprints').select().order('created_at', { ascending: false }).limit(1).single()
   if (!sprint) return NextResponse.json({ error: 'no sprint' }, { status: 404 })
 

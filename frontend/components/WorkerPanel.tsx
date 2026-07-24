@@ -27,12 +27,16 @@ function StatusBadge({ status }: { status: WorkerStatus }) {
 export function WorkerPanel({
   worker,
   onClose,
+  adminKey,
 }: {
   worker: Worker | null
   onClose: () => void
+  adminKey?: string
 }) {
   const [input, setInput] = useState('')
   const [localMessages, setLocalMessages] = useState(worker?.messages ?? [])
+  const [sendError, setSendError] = useState<string | null>(null)
+  const [sending, setSending] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Reset thread + draft when switching to a different worker
@@ -52,15 +56,35 @@ export function WorkerPanel({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [localMessages])
 
-  function handleSend() {
-    if (!input.trim() || !worker) return
-    const now = new Date()
-    const timestamp = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`
-    setLocalMessages((prev) => [
-      ...prev,
-      { id: `pm-${Date.now()}`, sender: 'agent', content: `[PM] ${input.trim()}`, timestamp },
-    ])
+  async function handleSend() {
+    if (!input.trim() || !worker || !adminKey) return
+    const content = `[PM] ${input.trim()}`
     setInput('')
+    setSendError(null)
+    setSending(true)
+    try {
+      const res = await fetch('/api/sprint/message', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-admin-key': adminKey },
+        body: JSON.stringify({ submissionId: worker.id, content }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setSendError(data.error ?? `send failed (${res.status})`)
+        return
+      }
+      // Optimistic local append — the next poll of /api/workers will reconcile.
+      const now = new Date()
+      const timestamp = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`
+      setLocalMessages((prev) => [
+        ...prev,
+        { id: `pm-${Date.now()}`, sender: 'agent', content, timestamp },
+      ])
+    } catch (e) {
+      setSendError(e instanceof Error ? e.message : 'send failed')
+    } finally {
+      setSending(false)
+    }
   }
 
   // Panel slides in/out
@@ -141,9 +165,10 @@ export function WorkerPanel({
           <div className="p-3 border-t border-gray-800 bg-gray-950">
             <div className="flex gap-2">
               <input
-                className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                placeholder="Message worker..."
+                className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                placeholder={adminKey ? 'Message worker...' : 'read-only (no admin key)'}
                 value={input}
+                disabled={!adminKey}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
@@ -154,12 +179,17 @@ export function WorkerPanel({
               />
               <button
                 onClick={handleSend}
-                disabled={!input.trim()}
+                disabled={!input.trim() || !adminKey || sending}
                 className="bg-blue-600 hover:bg-blue-500 disabled:opacity-30 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors flex-shrink-0"
               >
-                Send
+                {sending ? '…' : 'Send'}
               </button>
             </div>
+            {sendError && (
+              <p className="text-[10px] text-red-400 mt-1.5 text-center truncate" title={sendError}>
+                {sendError}
+              </p>
+            )}
             <p className="text-[10px] text-gray-600 mt-1.5 text-center">
               Message routed through Worker Agent via Linq
             </p>

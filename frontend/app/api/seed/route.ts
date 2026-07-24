@@ -18,6 +18,10 @@ const SimFindings = z.object({
 })
 
 export async function POST(req: Request) {
+  if (req.headers.get('x-admin-key') !== process.env.ADMIN_KEY) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  }
+
   const origin = new URL(req.url).origin
   const submissionId = `sim-${Math.random().toString(36).slice(2, 10)}`
 

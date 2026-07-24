@@ -9,6 +9,10 @@ const DEFAULT_QUESTION =
   'Compare 6 leading AI coding assistants (GitHub Copilot, Cursor, Claude Code, Windsurf, Aider, Replit Agent): current pricing, one sourced user complaint, and one differentiator each.'
 
 export async function POST(req: Request) {
+  if (req.headers.get('x-admin-key') !== process.env.ADMIN_KEY) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  }
+
   const body = await req.json().catch(() => ({}))
   const question: string = body.question || DEFAULT_QUESTION
 

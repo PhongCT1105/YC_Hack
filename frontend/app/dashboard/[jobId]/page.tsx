@@ -70,6 +70,7 @@ function TopBar({
   onSynthesize,
   synthesizing,
   actionError,
+  adminKey,
 }: {
   workers: Worker[]
   jobId: string
@@ -80,6 +81,7 @@ function TopBar({
   onSynthesize: () => void
   synthesizing: boolean
   actionError: string | null
+  adminKey: string | null
 }) {
   const total = workers.length
   const done = workers.filter((w) => w.status === 'done').length
@@ -129,14 +131,16 @@ function TopBar({
         ))}
         <button
           onClick={onSeed}
-          disabled={seeding}
+          disabled={seeding || !adminKey}
+          title={!adminKey ? 'append ?key=ADMIN_KEY to the URL' : undefined}
           className="text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-1 rounded-full transition-colors"
         >
           {seeding ? 'Seeding…' : '+ AI stand-in'}
         </button>
         <button
           onClick={onSynthesize}
-          disabled={synthesizing}
+          disabled={synthesizing || !adminKey}
+          title={!adminKey ? 'append ?key=ADMIN_KEY to the URL' : undefined}
           className="text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-1 rounded-full transition-colors"
         >
           {synthesizing ? 'Synthesizing…' : 'Synthesize'}
@@ -219,6 +223,15 @@ export default function DashboardPage({ params }: { params: { jobId: string } })
   const [synthesizing, setSynthesizing] = useState(false)
   const [report, setReport] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [adminKey, setAdminKey] = useState<string | null>(null)
+
+  // Read the admin key from the URL query string on mount. Using
+  // window.location.search in an effect (rather than useSearchParams)
+  // avoids the Suspense/prerender requirement for client components.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    setAdminKey(params.get('key'))
+  }, [])
 
   // Poll the live workers feed every 3s. Keeps the selected worker's panel
   // in sync by re-pointing it at the fresh object with the same id.
@@ -251,10 +264,11 @@ export default function DashboardPage({ params }: { params: { jobId: string } })
   }
 
   const handleSeed = async () => {
+    if (!adminKey) return
     setActionError(null)
     setSeeding(true)
     try {
-      const res = await fetch('/api/seed', { method: 'POST' })
+      const res = await fetch('/api/seed', { method: 'POST', headers: { 'x-admin-key': adminKey } })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) setActionError(data.error ?? `seed failed (${res.status})`)
     } catch (e) {
@@ -265,10 +279,11 @@ export default function DashboardPage({ params }: { params: { jobId: string } })
   }
 
   const handleSynthesize = async () => {
+    if (!adminKey) return
     setActionError(null)
     setSynthesizing(true)
     try {
-      const res = await fetch('/api/synthesize', { method: 'POST' })
+      const res = await fetch('/api/synthesize', { method: 'POST', headers: { 'x-admin-key': adminKey } })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) setActionError(data.error ?? `synthesize failed (${res.status})`)
       else if (data.report) setReport(data.report)
@@ -294,6 +309,7 @@ export default function DashboardPage({ params }: { params: { jobId: string } })
         onSynthesize={handleSynthesize}
         synthesizing={synthesizing}
         actionError={actionError}
+        adminKey={adminKey}
       />
 
       {/* Worker list sidebar (left) — only meaningful for the office view */}
@@ -339,6 +355,7 @@ export default function DashboardPage({ params }: { params: { jobId: string } })
               <WorkerPanel
                 worker={selectedWorker}
                 onClose={() => setSelectedWorker(null)}
+                adminKey={adminKey ?? undefined}
               />
             </div>
           )}

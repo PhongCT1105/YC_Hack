@@ -16,7 +16,8 @@ export async function POST(req: Request) {
   if (!sprint) return NextResponse.json({ error: 'sprint not found' }, { status: 404 })
   const { data: subtask } = await db.from('subtasks').select().eq('claimed_by', submissionId)
     .order('claimed_at', { ascending: false }).limit(1).maybeSingle()
-  const { data: history } = await db.from('messages').select().eq('submission_id', submissionId).order('ts').limit(30)
+  const { data: history } = await db.from('messages').select().eq('submission_id', submissionId)
+    .order('ts', { ascending: false }).limit(30)
 
   await db.from('messages').insert({ submission_id: submissionId, sender: 'worker', content: message })
 
@@ -26,7 +27,7 @@ export async function POST(req: Request) {
     subtaskBrief: subtask?.brief ?? '',
     codename: participant.codename,
     graphSummary: await buildGraphSummary(participant.sprint_id),
-    history: (history ?? []).map((m) => ({ sender: m.sender, content: m.content })),
+    history: (history ?? []).reverse().map((m) => ({ sender: m.sender, content: m.content })),
     userMessage: message,
   })
   await db.from('messages').insert({ submission_id: submissionId, sender: 'agent', content: reply })
