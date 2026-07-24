@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { db } from '@/lib/db'
 import { createDraft, launchDraft } from '@/lib/terac'
+import { decomposeQuestion } from '@/lib/agent'
 import { isAdminRequest } from '@/lib/admin'
 import { canLaunchFromMessage } from '@/app/api/workspaces/pmchatPolicy'
 
@@ -175,6 +176,31 @@ export async function POST(req: Request, { params }: { params: { id: string } })
               : 'POLICY BLOCK (not a Terac error): no Terac draft exists yet for this workspace. Call quote_recruitment first, then launch after the user approves.'
             isError = true
           } else {
+            // Re-balance subtasks to the hired team size: one subtask per
+            // worker, but only while the board is untouched (all open, no
+            // findings) — never rip up work in progress.
+            let rebalanced = 0
+            try {
+              const { data: sprintRow } = await db
+                .from('sprints').select('question, num_workers').eq('id', sprintId).single()
+              const n = sprintRow?.num_workers ?? 0
+              const { data: allSubs } = await db
+                .from('subtasks').select('id, status').eq('sprint_id', sprintId)
+              const allOpen = (allSubs ?? []).every((st) => st.status === 'open')
+              const { count: findingCount } = await db
+                .from('findings').select('*', { count: 'exact', head: true })
+                .in('subtask_id', (allSubs ?? []).map((st) => st.id))
+              if (n >= 1 && n <= 8 && allOpen && !findingCount && (allSubs ?? []).length !== n) {
+                const fresh = await decomposeQuestion(sprintRow!.question, n)
+                await db.from('subtasks').delete().eq('sprint_id', sprintId)
+                await db.from('subtasks').insert(
+                  fresh.map((t) => ({ sprint_id: sprintId, title: t.title, brief: t.brief }))
+                )
+                rebalanced = fresh.length
+              }
+            } catch (e) {
+              console.error('rebalance failed, launching with existing subtasks', e)
+            }
             const launch = await launchDraft(draftId!)
             if (launch.launched) {
               const { error: stageError } = await db
@@ -183,7 +209,11 @@ export async function POST(req: Request, { params }: { params: { id: string } })
                 .eq('id', sprintId)
               if (stageError) throw stageError
             }
-            resultContent = JSON.stringify({ launched: launch.launched, note: launch.note })
+            resultContent = JSON.stringify({
+              launched: launch.launched,
+              note: launch.note,
+              subtasksRebalanced: rebalanced || undefined,
+            })
             isError = !launch.launched
           }
         } else if (block.name === 'get_progress') {
