@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { decomposeQuestion } from '@/lib/agent'
 import { isAdminRequest } from '@/lib/admin'
 
 export const dynamic = 'force-dynamic'
@@ -83,16 +82,8 @@ export async function POST(req: Request) {
   if (!question) return NextResponse.json({ error: 'question required' }, { status: 400 })
   if (question.length > 500) question = question.slice(0, 500)
 
-  let decomposed: { title: string; brief: string }[]
-  try {
-    decomposed = await decomposeQuestion(question)
-  } catch {
-    return NextResponse.json(
-      { error: 'The planning agent could not decompose this question. Please retry.' },
-      { status: 502 }
-    )
-  }
-
+  // No decomposition at creation: the work is divided only after the user
+  // decides how many researchers to hire (quote/launch in the planning chat).
   const { data: sprint, error } = await db
     .from('sprints')
     .insert({ question, status: 'active', stage: 'planning' })
@@ -100,12 +91,6 @@ export async function POST(req: Request) {
     .single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  const rows = decomposed.map((s) => ({ sprint_id: sprint.id, title: s.title, brief: s.brief }))
-  const { data: subtasks, error: e2 } = await db.from('subtasks').insert(rows).select()
-  if (e2) {
-    await db.from('sprints').delete().eq('id', sprint.id)
-    return NextResponse.json({ error: e2.message }, { status: 500 })
-  }
 
   const { error: eventError } = await db
     .from('events')
@@ -117,11 +102,11 @@ export async function POST(req: Request) {
   const { error: pmError } = await db.from('pm_messages').insert({
     sprint_id: sprint.id,
     sender: 'agent',
-    content: `Workspace created. I split "${question}" into ${subtasks.length} subtasks. How many human researchers do you want to recruit? I can quote the cost before we launch.`,
+    content: `Workspace created for: "${question}". How many human researchers do you want? I'll divide the work into exactly that many subtasks — one per researcher — and quote the cost before anything launches.`,
   })
   if (pmError) {
     return NextResponse.json({ error: pmError.message }, { status: 500 })
   }
 
-  return NextResponse.json({ sprint, subtasks })
+  return NextResponse.json({ sprint, subtasks: [] })
 }

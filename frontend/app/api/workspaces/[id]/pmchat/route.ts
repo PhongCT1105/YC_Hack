@@ -162,10 +162,33 @@ export async function POST(req: Request, { params }: { params: { id: string } })
             .update({ num_workers: n, cost_cents: draft.totalCents, terac_opportunity_id: draft.id })
             .eq('id', sprintId)
           if (quoteError) throw quoteError
+          // Divide the work by team size now — one subtask per researcher —
+          // as long as no one has started working (all open, zero findings).
+          let divided = 0
+          try {
+            const { data: allSubs } = await db
+              .from('subtasks').select('id, status').eq('sprint_id', sprintId)
+            const allOpen = (allSubs ?? []).every((st) => st.status === 'open')
+            const subIds = (allSubs ?? []).map((st) => st.id)
+            const { count: findingCount } = subIds.length
+              ? await db.from('findings').select('*', { count: 'exact', head: true }).in('subtask_id', subIds)
+              : { count: 0 }
+            if (n >= 1 && n <= 8 && allOpen && !findingCount && (allSubs ?? []).length !== n) {
+              const fresh = await decomposeQuestion(sprint.question, n)
+              if (subIds.length) await db.from('subtasks').delete().eq('sprint_id', sprintId)
+              await db.from('subtasks').insert(
+                fresh.map((t) => ({ sprint_id: sprintId, title: t.title, brief: t.brief }))
+              )
+              divided = fresh.length
+            }
+          } catch (e) {
+            console.error('work division at quote failed', e)
+          }
           resultContent = JSON.stringify({
             perHead: centsToDollars(draft.perHeadCents),
             total: centsToDollars(draft.totalCents),
             estimated: draft.estimated,
+            workDividedInto: divided || undefined,
           })
         } else if (block.name === 'launch_recruitment') {
           const { data: current } = await db.from('sprints').select('terac_opportunity_id').eq('id', sprintId).single()
