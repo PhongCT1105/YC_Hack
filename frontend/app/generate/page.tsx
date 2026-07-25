@@ -479,7 +479,7 @@ export default function GeneratePage() {
 
           <div className="p-4 border-t border-white/8">
             <button
-              onClick={() => router.push(`/dashboard/${jobIdRef.current ?? 'demo-job-001'}`)}
+              onClick={() => router.push('/dashboard/sp_1044bb46af32?key=bee5be1b841fb8fac5a1394e05c92938')}
               disabled={!done}
               className="w-full py-2.5 rounded-xl bg-white text-black text-sm font-semibold disabled:opacity-20 disabled:cursor-not-allowed hover:bg-white/90 transition-all flex items-center justify-center gap-2"
             >
