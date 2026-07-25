@@ -1,4 +1,4 @@
-# Minion HQ
+# Despicable Me 5
 
 An agentic task delegation platform for product managers. Describe a job in natural language — Minion HQ decomposes it into subtasks, recruits vetted human workers via Terac, and keeps everyone in sync through an AI messaging layer powered by Linq.
 
