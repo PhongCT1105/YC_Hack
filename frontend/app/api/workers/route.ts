@@ -88,6 +88,7 @@ export async function GET(req: Request) {
       status: mapStatus(p, st?.status ?? null),
       lastMessage: last?.content?.slice(0, 120) ?? '',
       lastUpdated: ago(p.last_seen),
+      linqPhone: '17747013932',
       position: DESKS[i % DESKS.length],
       messages: msgs.map((m) => ({
         id: String(m.id), sender: m.sender, content: m.content,

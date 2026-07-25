@@ -32,9 +32,9 @@ export async function GET(req: NextRequest) {
       const chats: Record<string, unknown>[] = data.chats ?? data.items ?? data.data ?? []
       const digits = phone.replace(/\D/g, '')
       const found = chats.find((c) => {
-        const participants = (c.participants ?? c.members ?? []) as Record<string, unknown>[]
-        return participants.some((p) => {
-          const ph = String(p.phone ?? p.number ?? '')
+        const handles = (c.handles ?? c.participants ?? c.members ?? []) as Record<string, unknown>[]
+        return handles.some((p) => {
+          const ph = String(p.handle ?? p.phone ?? p.number ?? '')
           return ph.replace(/\D/g, '').endsWith(digits)
         })
       })
